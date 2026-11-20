@@ -19,6 +19,7 @@ for (variants, supertype, temperature_parameters, cooling_options) in (
         abundance_parameters = dem_parameter_names(kind)
         names = (:K, temperature_parameters..., abundance_parameters..., :redshift)
         broadened && (names = (names..., :velocity))
+        supertype === :AbstractCoolflowModel && (names = (names..., :slope))
         fields = [:($parameter::T) for parameter in names]
         @eval struct $model{T} <: $supertype{T}
             db::AtomDB
@@ -53,7 +54,7 @@ end
 
 for (_, constructor, model, mode, broadened) in COOLFLOW_VARIANTS
     @eval function $constructor(db::AtomDB; K = 1.0, lowT = 0.1, highT = 4.0, redshift = 0.1,
-            velocity = nothing, switch::Integer = 2, ntemps::Integer = COOLING_NTEMPS,
+            slope = 0.0, velocity = nothing, switch::Integer = 2, ntemps::Integer = COOLING_NTEMPS,
             cosmology::CoolingCosmology = CoolingCosmology(), distance_mpc::Union{Nothing,Real} = nothing,
             normalization_redshift::Union{Nothing,Real} = nothing, bolometric::Symbol = :xspec,
             abundance_table = :angr, trace_abundance = 1.0, thermal_broadening::Bool = $broadened,
@@ -62,7 +63,8 @@ for (_, constructor, model, mode, broadened) in COOLFLOW_VARIANTS
         settings = CoolingOptions(cosmology; distance_mpc, normalization_redshift, ntemps, bolometric)
         tail = fit_cooling_tail(Val($(QuoteNode(mode))), elements, redshift, velocity, $broadened, settings)
         return $model(db, options, settings, fit_parameter(K, 0.0, 1e24, false),
-            fit_parameter(lowT, 0.0808, 79.9, false), fit_parameter(highT, 0.0808, 79.9, false), tail...)
+            fit_parameter(lowT, 0.0808, 79.9, false), fit_parameter(highT, 0.0808, 79.9, false), tail...,
+            fit_parameter(slope, -5.0, 5.0, true))
     end
 end
 
@@ -82,7 +84,7 @@ for (_, constructor, model, mode, broadened) in CPH_VARIANTS
 end
 
 for (_, constructor, model, mode, broadened) in LOCAL_COOLFLOW_VARIANTS
-    @eval function $constructor(db::AtomDB; K = 1.0, lowT = 0.1, highT = 4.0,
+    @eval function $constructor(db::AtomDB; K = 1.0, lowT = 0.1, highT = 4.0, slope = 0.0,
             redshift = 0.0, velocity = nothing, switch::Integer = 2, ntemps::Integer = COOLING_NTEMPS,
             bolometric::Symbol = :xspec, abundance_table = :angr, trace_abundance = 1.0,
             thermal_broadening::Bool = $broadened, elements...)
@@ -90,7 +92,8 @@ for (_, constructor, model, mode, broadened) in LOCAL_COOLFLOW_VARIANTS
         settings = LocalCoolingOptions(ntemps, bolometric)
         tail = fit_cooling_tail(Val($(QuoteNode(mode))), elements, redshift, velocity, $broadened, settings)
         return $model(db, options, settings, fit_parameter(K, 0.0, 1e24, false),
-            fit_parameter(lowT, 0.0808, 79.9, false), fit_parameter(highT, 0.0808, 79.9, false), tail...)
+            fit_parameter(lowT, 0.0808, 79.9, false), fit_parameter(highT, 0.0808, 79.9, false), tail...,
+            fit_parameter(slope, -5.0, 5.0, true))
     end
 end
 
@@ -108,7 +111,8 @@ for (_, constructor, model, mode, broadened) in LOCAL_CPH_VARIANTS
 end
 
 function model_cooling_weights(model::AbstractCoolflowModel, abundances, z_norm)
-    return cooling_weights(model.db, abundances, model.options, model.cooling, z_norm, model.lowT, model.highT)
+    return cooling_weights(model.db, abundances, model.options, model.cooling, z_norm, model.lowT, model.highT;
+        slope = model.slope)
 end
 
 function model_cooling_weights(model::AbstractCphModel, abundances, z_norm)

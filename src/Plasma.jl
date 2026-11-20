@@ -61,7 +61,15 @@ for variants in (WDEM_VARIANTS, CEMPOW_VARIANTS, COOLFLOW_VARIANTS, CPH_VARIANTS
 end
 
 @doc """
-    LocalCoolflow(db::AtomDB; redshift=0.0, K=1.0, ...)
+    Coolflow(db::AtomDB; lowT=0.1, highT=4.0, slope=0.0, ...)
+
+Fit-ready AtomDB cooling flow. The dimensionless `slope` multiplies the
+emission measure at each temperature by `(T / highT)^slope`.
+Pass a `FitParam` to fit the slope.
+""" Coolflow
+
+@doc """
+    LocalCoolflow(db::AtomDB; slope=0.0, redshift=0.0, K=1.0, ...)
 
 Fit-ready cooling flow with `K` equal to the mass accretion rate divided by
 the squared source distance, in units of 10⁻¹⁴ solar masses per year per

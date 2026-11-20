@@ -22,7 +22,15 @@
         args = (; lowT = t1, highT = t2, redshift = 0.0, distance_mpc, ntemps = 2)
         plain = coolflow(edges, db; args...)
         @test coolflow(edges, db; args..., bolometric = :xspec) == plain
+        @test coolflow(edges, db; args..., slope = 0.0) == plain
         @test isapprox(coolflow(edges, db; args..., bolometric = :direct), expected; atol = 0.0)
+        # The fixture spectrum and bolometric emissivity both scale with kT.
+        # With two temperature samples only the trapezoid endpoints contribute.
+        for slope in (-1.0, 1.0)
+            factor = (t1 / t2)^slope + 3
+            sloped = coolflow(edges, db; args..., bolometric = :direct, slope)
+            @test sloped ≈ expected .* (factor / 4)
+        end
         @test isapprox(coolflow(edges, db; args..., norm = 4.5), 4.5 .* plain; atol = 0.0)
         @test coolflow(edges, db; args..., highT = t1) == zeros(length(edges) - 1)
         @test coolflow(edges, db; args..., norm = 0.0) == zeros(length(edges) - 1)
@@ -39,6 +47,7 @@
         @test_throws DomainError coolflow(edges, db; distance_mpc = -1.0)
         @test_throws ArgumentError coolflow(edges, db; bolometric = :unknown)
         @test_throws DomainError coolflow(edges, db; normalization_redshift = 0.0)
+        @test_throws DomainError coolflow(edges, db; args..., slope = NaN)
 
         z = 0.08
         d = Plasma.cooling_luminosity_distance(z, CoolingCosmology())
@@ -62,6 +71,8 @@
         local_args = (; lowT = t1, highT = t2, norm = local_norm, ntemps = 2)
         @test localcoolflow(edges, db; local_args...) ≈ plain
         @test localcoolflow(blue_edges, db; local_args..., redshift = blueshift) ≈ plain
+        @test localcoolflow(blue_edges, db; local_args..., redshift = blueshift, slope = 0.7) ≈
+            coolflow(edges, db; args..., slope = 0.7)
         @test !isapprox(localcoolflow(edges, db; local_args..., redshift = blueshift), plain)
         @test localcoolflow(edges, db; local_args..., norm = 3 * local_norm) ≈ 3 .* plain
         @test_throws ArgumentError localcoolflow(edges, db; distance_mpc)

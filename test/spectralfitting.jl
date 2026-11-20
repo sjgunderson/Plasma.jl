@@ -88,10 +88,10 @@ end
         edges = collect(range(1.0, 13.0; length = 201))
         distance_mpc, redshift, K = 11.0, 0.02, 0.4
         for (constructor, evaluator, names, kwargs) in (
-                (Coolflow, coolflow, (:lowT, :highT), (; abundance = 0.6)),
-                (Vcoolflow, vcoolflow, (:lowT, :highT), (; Fe = 0.4, Na = 0.3)),
-                (Bcoolflow, bcoolflow, (:lowT, :highT), (; velocity = 200.0)),
-                (Bvcoolflow, bvcoolflow, (:lowT, :highT), (; velocity = 200.0, Na = 0.3)),
+                (Coolflow, coolflow, (:lowT, :highT), (; abundance = 0.6, slope = 0.7)),
+                (Vcoolflow, vcoolflow, (:lowT, :highT), (; Fe = 0.4, Na = 0.3, slope = -0.7)),
+                (Bcoolflow, bcoolflow, (:lowT, :highT), (; velocity = 200.0, slope = 0.7)),
+                (Bvcoolflow, bvcoolflow, (:lowT, :highT), (; velocity = 200.0, Na = 0.3, slope = -0.7)),
                 (Cph, cph, (:peakT,), (; peakT = 1.5)),
                 (Vcph, vcph, (:peakT,), (; Fe = 0.4, Na = 0.3)),
                 (Bcph, bcph, (:peakT,), (; velocity = 200.0)),
@@ -105,16 +105,18 @@ end
             @test isapprox(invokemodel(edges, model + model), 2 .* expected)
         end
         @test Mkcflow === Coolflow && Vmcflow === Vcoolflow
+        @test Coolflow(db).slope.frozen && iszero(Coolflow(db).slope.value)
+        @test !LocalCoolflow(db; slope = FitParam(0.7; frozen = false)).slope.frozen
         fixed = Coolflow(db; K, redshift, distance_mpc, normalization_redshift = 0.0, bolometric = :direct)
         rest = Coolflow(db; K, redshift = 0.0, distance_mpc, bolometric = :direct)
         @test invokemodel(edges ./ (1 + redshift), fixed) ≈ invokemodel(edges, rest)
         local_K = K / (1e-14 * (1e6 * distance_mpc)^2)
         @test invokemodel(edges, LocalCoolflow(db; K = local_K, bolometric = :direct)) ≈ invokemodel(edges, rest)
         for (constructor, evaluator, kwargs) in (
-                (LocalCoolflow, localcoolflow, (;)),
-                (LocalVcoolflow, localvcoolflow, (; Fe = 0.5)),
-                (LocalBcoolflow, localbcoolflow, (; velocity = 200.0)),
-                (LocalBvcoolflow, localbvcoolflow, (; Na = 0.3, velocity = 200.0)),
+                (LocalCoolflow, localcoolflow, (; slope = 0.7)),
+                (LocalVcoolflow, localvcoolflow, (; Fe = 0.5, slope = -0.7)),
+                (LocalBcoolflow, localbcoolflow, (; velocity = 200.0, slope = 0.7)),
+                (LocalBvcoolflow, localbvcoolflow, (; Na = 0.3, velocity = 200.0, slope = -0.7)),
                 (LocalCph, localcph, (; peakT = 1.5)),
                 (LocalVcph, localvcph, (; Fe = 0.5)),
                 (LocalBcph, localbcph, (; velocity = 200.0)),

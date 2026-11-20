@@ -221,14 +221,15 @@ function cooling_temperatures(lowT, highT, ntemps)
     return temperatures, logstep
 end
 
-function cooling_weights(db, abundances, options, settings, z_norm, lowT, highT; peakT = nothing)
+function cooling_weights(db, abundances, options, settings, z_norm, lowT, highT; peakT = nothing, slope = 0.0)
     if !all(value -> value isa Real && isfinite(value) && value >= 0, abundances)
         throw(DomainError(abundances, "Element abundances must be nonnegative and finite"))
     end
+    isfinite(slope) || throw(DomainError(slope, "Cooling-flow slope must be finite"))
     norm = cooling_normalization(z_norm, settings)
     temperatures, logstep = cooling_temperatures(lowT, highT, settings.ntemps)
     if iszero(logstep)
-        return zeros(typeof(lowT + highT + norm + first(abundances)), length(db.temperatures))
+        return zeros(typeof(lowT + highT + norm + first(abundances) + slope), length(db.temperatures))
     end
 
     scales = map(*, promote(abundances...), options.ratios)
@@ -252,19 +253,20 @@ function cooling_weights(db, abundances, options, settings, z_norm, lowT, highT;
                 cooling = emissivity * min(logstep, 1.0)
             end
         end
-        iszero(cooling) && return zero(cooling * norm)
+        iszero(cooling) && return zero(cooling * norm * slope)
         endpoint = i == 1 || i == length(temperatures)
-        return norm * temperature * (endpoint ? logstep / 2 : logstep) / cooling
+        power = (temperature / highT)^slope
+        return norm * temperature * (endpoint ? logstep / 2 : logstep) * power / cooling
     end
     return dem_node_weights(db, (temperatures, emission_measures))
 end
 
 function evaluate_cooling(edges, db, kind, options, settings, elements, lowT, highT;
-        redshift, norm, velocity, peakT = nothing)
+        redshift, norm, velocity, peakT = nothing, slope = 0.0)
     values = element_parameters(elements, dem_abundance_names(kind))
     abundances = dem_abundances(kind, values, options)
     z_norm = cooling_norm_redshift(settings, redshift)
-    weights = cooling_weights(db, abundances, options, settings, z_norm, lowT, highT; peakT)
+    weights = cooling_weights(db, abundances, options, settings, z_norm, lowT, highT; peakT, slope)
     return evaluate_cie(edges, db, abundances, options, weights;
         redshift, normalization_redshift = z_norm, norm, velocity)
 end
@@ -272,7 +274,7 @@ end
 for (evaluator, _, _, mode, broadened) in COOLFLOW_VARIANTS
     @eval function $evaluator(edges::AbstractVector, db::AtomDB;
             lowT::Real = 0.1, highT::Real = 4.0, redshift::Real = 0.1, norm::Real = 1.0,
-            velocity::Real = 0.0, switch::Integer = 2, ntemps::Integer = COOLING_NTEMPS,
+            slope::Real = 0.0, velocity::Real = 0.0, switch::Integer = 2, ntemps::Integer = COOLING_NTEMPS,
             cosmology::CoolingCosmology = CoolingCosmology(), distance_mpc::Union{Nothing,Real} = nothing,
             normalization_redshift::Union{Nothing,Real} = nothing, bolometric::Symbol = :xspec,
             abundance_table = :angr, trace_abundance = 1.0, thermal_broadening::Bool = $broadened,
@@ -280,7 +282,7 @@ for (evaluator, _, _, mode, broadened) in COOLFLOW_VARIANTS
         options = dem_options(abundance_table, trace_abundance, thermal_broadening, 1.0, switch)
         settings = CoolingOptions(cosmology; distance_mpc, normalization_redshift, ntemps, bolometric)
         return evaluate_cooling(edges, db, Val($(QuoteNode(mode))), options, settings, elements, lowT, highT;
-            redshift, norm, velocity)
+            redshift, norm, velocity, slope)
     end
 end
 
@@ -302,13 +304,13 @@ end
 for (evaluator, _, _, mode, broadened) in LOCAL_COOLFLOW_VARIANTS
     @eval function $evaluator(edges::AbstractVector, db::AtomDB;
             lowT::Real = 0.1, highT::Real = 4.0, redshift::Real = 0.0, norm::Real = 1.0,
-            velocity::Real = 0.0, switch::Integer = 2, ntemps::Integer = COOLING_NTEMPS,
+            slope::Real = 0.0, velocity::Real = 0.0, switch::Integer = 2, ntemps::Integer = COOLING_NTEMPS,
             bolometric::Symbol = :xspec, abundance_table = :angr, trace_abundance = 1.0,
             thermal_broadening::Bool = $broadened, elements...)
         options = dem_options(abundance_table, trace_abundance, thermal_broadening, 1.0, switch)
         settings = LocalCoolingOptions(ntemps, bolometric)
         return evaluate_cooling(edges, db, Val($(QuoteNode(mode))), options, settings, elements, lowT, highT;
-            redshift, norm, velocity)
+            redshift, norm, velocity, slope)
     end
 end
 
@@ -326,12 +328,14 @@ for (evaluator, _, _, mode, broadened) in LOCAL_CPH_VARIANTS
 end
 
 @doc """
-    localcoolflow(edges, db::AtomDB; redshift=0.0, norm=1.0, ...)
+    localcoolflow(edges, db::AtomDB; slope=0.0, redshift=0.0, norm=1.0, ...)
 
 Evaluate cooling flow with `norm` equal to the mass accretion rate divided by
 the squared source distance, in units of 10⁻¹⁴ solar masses per year per
 square parsec.
 The signed spectral redshift is independent of the normalization.
+The optional `slope` multiplies each temperature's emission measure by
+`(T / highT)^slope`.
 """ localcoolflow
 
 const mkcflow = coolflow

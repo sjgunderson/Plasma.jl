@@ -61,11 +61,11 @@ for variants in (WDEM_VARIANTS, CEMPOW_VARIANTS, COOLFLOW_VARIANTS, CPH_VARIANTS
 end
 
 @doc """
-    LocalCoolflow(db::AtomDB; distance_mpc, redshift=0.0, K=1.0, ...)
+    LocalCoolflow(db::AtomDB; redshift=0.0, K=1.0, ...)
 
-Fit-ready cooling flow at a known distance. `K` is the mass accretion rate in
-solar masses per year. The signed spectral `redshift` can be fitted without
-changing the normalization.
+Fit-ready cooling flow with `K` equal to the mass accretion rate divided by
+the squared source distance, in solar masses per year per square parsec.
+The signed spectral `redshift` can be fitted independently.
 """ LocalCoolflow
 
 const Mkcflow = Coolflow

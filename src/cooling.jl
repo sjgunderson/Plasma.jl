@@ -25,6 +25,7 @@ const LOCAL_CPH_VARIANTS = local_cooling_variants(CPH_VARIANTS)
 const COOLING_NTEMPS = 10
 const CPH_LIMITS = (0.01, 50.0)
 const MPC_CM = 3.0856775814913673e24
+const PC_CM = MPC_CM / 1e6
 const FLOW_PARTICLES_PER_SECOND = (5 / 2) * (1.98847e33 / 31_557_600) / (0.6 * 1.66053906660e-24)
 
 # XSPEC 12.15's AtomDB grid from plasmaFileInfo, in keV.
@@ -65,7 +66,7 @@ struct CoolingOptions
     bolometric::Symbol
 
     function CoolingOptions(cosmology; distance_mpc, normalization_redshift, ntemps::Integer, bolometric::Symbol)
-        ntemps >= 2 || throw(ArgumentError("ntemps must be at least 2"))
+        validate_cooling_quadrature(ntemps, bolometric)
         if !isnothing(distance_mpc)
             isfinite(distance_mpc) && distance_mpc > 0 ||
                 throw(DomainError(distance_mpc, "Luminosity distance must be positive and finite"))
@@ -77,10 +78,28 @@ struct CoolingOptions
                 throw(DomainError(normalization_redshift, "A nonpositive normalization_redshift requires distance_mpc"))
             end
         end
-        bolometric in (:xspec, :direct) || throw(ArgumentError("bolometric must be :xspec or :direct"))
         return new(cosmology, distance_mpc, normalization_redshift, ntemps, bolometric)
     end
 end
+
+struct LocalCoolingOptions
+    ntemps::Int
+    bolometric::Symbol
+
+    function LocalCoolingOptions(ntemps::Integer, bolometric::Symbol)
+        validate_cooling_quadrature(ntemps, bolometric)
+        return new(ntemps, bolometric)
+    end
+end
+
+function validate_cooling_quadrature(ntemps, bolometric)
+    ntemps >= 2 || throw(ArgumentError("ntemps must be at least 2"))
+    bolometric in (:xspec, :direct) || throw(ArgumentError("bolometric must be :xspec or :direct"))
+    return nothing
+end
+
+cooling_norm_redshift(settings::CoolingOptions, redshift) = something(settings.normalization_redshift, redshift)
+cooling_norm_redshift(::LocalCoolingOptions, _redshift) = 0.0
 
 function cooling_luminosity_distance(z, cosmology)
     isfinite(z) && z > 0 ||
@@ -107,7 +126,7 @@ function cooling_luminosity_distance(z, cosmology)
     return (1 + z) * hubble_distance * (2 / 3) * step * integral
 end
 
-function cooling_normalization(z_norm, settings)
+function cooling_normalization(z_norm, settings::CoolingOptions)
     isfinite(z_norm) && z_norm > -1 ||
         throw(DomainError(z_norm, "Normalization redshift must be finite and greater than -1"))
     distance = settings.distance_mpc
@@ -117,6 +136,10 @@ function cooling_normalization(z_norm, settings)
     distance_cm = distance * MPC_CM
     return 1e-14 * FLOW_PARTICLES_PER_SECOND / (4π * distance_cm^2)
 end
+
+# Local K or norm already contains the inverse-square distance in pc⁻².
+cooling_normalization(_z_norm, ::LocalCoolingOptions) =
+    1e-14 * FLOW_PARTICLES_PER_SECOND / (4π * PC_CM^2)
 
 function continuum_luminosity(continuum)
     energy, density = continuum.energies, continuum.density
@@ -235,6 +258,16 @@ function cooling_weights(db, abundances, options, settings, z_norm, lowT, highT;
     return dem_node_weights(db, (temperatures, emission_measures))
 end
 
+function evaluate_cooling(edges, db, kind, options, settings, elements, lowT, highT;
+        redshift, norm, velocity, peakT = nothing)
+    values = element_parameters(elements, dem_abundance_names(kind))
+    abundances = dem_abundances(kind, values, options)
+    z_norm = cooling_norm_redshift(settings, redshift)
+    weights = cooling_weights(db, abundances, options, settings, z_norm, lowT, highT; peakT)
+    return evaluate_cie(edges, db, abundances, options, weights;
+        redshift, normalization_redshift = z_norm, norm, velocity)
+end
+
 for (evaluator, _, _, mode, broadened) in COOLFLOW_VARIANTS
     @eval function $evaluator(edges::AbstractVector, db::AtomDB;
             lowT::Real = 0.1, highT::Real = 4.0, redshift::Real = 0.1, norm::Real = 1.0,
@@ -245,13 +278,8 @@ for (evaluator, _, _, mode, broadened) in COOLFLOW_VARIANTS
             elements...)
         options = dem_options(abundance_table, trace_abundance, thermal_broadening, 1.0, switch)
         settings = CoolingOptions(cosmology; distance_mpc, normalization_redshift, ntemps, bolometric)
-        kind = Val($(QuoteNode(mode)))
-        values = element_parameters(elements, dem_abundance_names(kind))
-        abundances = dem_abundances(kind, values, options)
-        z_norm = something(settings.normalization_redshift, redshift)
-        weights = cooling_weights(db, abundances, options, settings, z_norm, lowT, highT)
-        return evaluate_cie(edges, db, abundances, options, weights;
-            redshift, normalization_redshift = z_norm, norm, velocity)
+        return evaluate_cooling(edges, db, Val($(QuoteNode(mode))), options, settings, elements, lowT, highT;
+            redshift, norm, velocity)
     end
 end
 
@@ -265,35 +293,43 @@ for (evaluator, _, _, mode, broadened) in CPH_VARIANTS
             elements...)
         options = dem_options(abundance_table, trace_abundance, thermal_broadening, 1.0, switch)
         settings = CoolingOptions(cosmology; distance_mpc, normalization_redshift, ntemps, bolometric)
-        kind = Val($(QuoteNode(mode)))
-        values = element_parameters(elements, dem_abundance_names(kind))
-        abundances = dem_abundances(kind, values, options)
-        z_norm = something(settings.normalization_redshift, redshift)
-        weights = cooling_weights(db, abundances, options, settings, z_norm, CPH_LIMITS...; peakT)
-        return evaluate_cie(edges, db, abundances, options, weights;
-            redshift, normalization_redshift = z_norm, norm, velocity)
+        return evaluate_cooling(edges, db, Val($(QuoteNode(mode))), options, settings, elements, CPH_LIMITS...;
+            redshift, norm, velocity, peakT)
     end
 end
 
-for (variants, local_variants) in ((COOLFLOW_VARIANTS, LOCAL_COOLFLOW_VARIANTS), (CPH_VARIANTS, LOCAL_CPH_VARIANTS))
-    for (variant, local_variant) in zip(variants, local_variants)
-        evaluator, local_evaluator = first(variant), first(local_variant)
-        @eval function $local_evaluator(edges::AbstractVector, db::AtomDB;
-                distance_mpc::Real, redshift::Real = 0.0, kwargs...)
-            if haskey(kwargs, :normalization_redshift)
-                throw(ArgumentError("Local models use distance_mpc and a shift-only redshift"))
-            end
-            return $evaluator(edges, db; distance_mpc, redshift, kwargs..., normalization_redshift = 0.0)
-        end
+for (evaluator, _, _, mode, broadened) in LOCAL_COOLFLOW_VARIANTS
+    @eval function $evaluator(edges::AbstractVector, db::AtomDB;
+            lowT::Real = 0.1, highT::Real = 4.0, redshift::Real = 0.0, norm::Real = 1.0,
+            velocity::Real = 0.0, switch::Integer = 2, ntemps::Integer = COOLING_NTEMPS,
+            bolometric::Symbol = :xspec, abundance_table = :angr, trace_abundance = 1.0,
+            thermal_broadening::Bool = $broadened, elements...)
+        options = dem_options(abundance_table, trace_abundance, thermal_broadening, 1.0, switch)
+        settings = LocalCoolingOptions(ntemps, bolometric)
+        return evaluate_cooling(edges, db, Val($(QuoteNode(mode))), options, settings, elements, lowT, highT;
+            redshift, norm, velocity)
+    end
+end
+
+for (evaluator, _, _, mode, broadened) in LOCAL_CPH_VARIANTS
+    @eval function $evaluator(edges::AbstractVector, db::AtomDB;
+            peakT::Real = 2.2, redshift::Real = 0.0, norm::Real = 1.0, velocity::Real = 0.0,
+            switch::Integer = 2, ntemps::Integer = COOLING_NTEMPS, bolometric::Symbol = :xspec,
+            abundance_table = :angr, trace_abundance = 1.0, thermal_broadening::Bool = $broadened,
+            elements...)
+        options = dem_options(abundance_table, trace_abundance, thermal_broadening, 1.0, switch)
+        settings = LocalCoolingOptions(ntemps, bolometric)
+        return evaluate_cooling(edges, db, Val($(QuoteNode(mode))), options, settings, elements, CPH_LIMITS...;
+            redshift, norm, velocity, peakT)
     end
 end
 
 @doc """
-    localcoolflow(edges, db::AtomDB; distance_mpc, redshift=0.0, norm=1.0, ...)
+    localcoolflow(edges, db::AtomDB; redshift=0.0, norm=1.0, ...)
 
-Evaluate cooling flow at a known distance in Mpc. The spectral shift is
-signed. Negative redshift moves lines to higher energy. `norm` is the mass
-accretion rate in solar masses per year.
+Evaluate cooling flow with `norm` equal to the mass accretion rate divided by
+the squared source distance, in solar masses per year per square parsec.
+The signed spectral redshift is independent of the normalization.
 """ localcoolflow
 
 const mkcflow = coolflow

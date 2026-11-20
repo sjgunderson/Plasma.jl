@@ -58,16 +58,18 @@
 
         blueshift = -0.125
         blue_edges = edges ./ (1 + blueshift)
-        local_args = (; lowT = t1, highT = t2, distance_mpc, ntemps = 2)
+        local_norm = 1.0 / (1e6 * distance_mpc)^2
+        local_args = (; lowT = t1, highT = t2, norm = local_norm, ntemps = 2)
         @test localcoolflow(edges, db; local_args...) ≈ plain
         @test localcoolflow(blue_edges, db; local_args..., redshift = blueshift) ≈ plain
         @test !isapprox(localcoolflow(edges, db; local_args..., redshift = blueshift), plain)
-        @test_throws UndefKeywordError localcoolflow(edges, db)
-        @test_throws DomainError localcoolflow(edges, db; distance_mpc = 0.0)
+        @test localcoolflow(edges, db; local_args..., norm = 3 * local_norm) ≈ 3 .* plain
+        @test_throws ArgumentError localcoolflow(edges, db; distance_mpc)
 
         peakT = first(Plasma.cooling_temperatures(Plasma.CPH_LIMITS..., 10))[6]
         heating = cph(edges, db; peakT, distance_mpc, redshift = 0.0)
         @test all(isfinite, heating) && sum(heating) > 0
+        @test localcph(blue_edges, db; peakT, norm = local_norm, redshift = blueshift) ≈ heating
         @test isapprox(vcph(edges, db; peakT, distance_mpc, redshift = 0.0), heating)
         @test isapprox(bcph(edges, db; peakT, distance_mpc, redshift = 0.0, velocity = 300.0),
             bvcph(edges, db; peakT, distance_mpc, redshift = 0.0, velocity = 300.0))

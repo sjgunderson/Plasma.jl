@@ -136,8 +136,8 @@ from 0.0105 to 1,000 keV and bin-midpoint weighting. Use
 original energies of resolved lines. The choice can have a large effect on
 `cph` where heating and cooling nearly cancel.
 
-The standalone `norm` and the SpectralFitting `K` are mass accretion rates
-in solar masses per year. The default `CoolingCosmology()` uses
+For the cosmological families, the standalone `norm` and SpectralFitting `K`
+are mass accretion rates in solar masses per year. The default `CoolingCosmology()` uses
 `H0=70.0`, `q0=0.0`, and `lambda0=0.73` to determine distance from
 `redshift`. Set `distance_mpc` to supply an independently measured distance.
 By default, `redshift` also supplies the normalization's photon arrival-rate
@@ -147,9 +147,12 @@ A positive `normalization_redshift` can supply the cosmological distance.
 The `V` and `B` variants follow the abundance and broadening conventions of
 `Cempow`.
 
-The local families require a positive `distance_mpc` and default to
-`redshift=0.0`. Distance sets the normalization, and the signed `redshift`
-only shifts the spectrum. A negative value blueshifts the lines.
+For the local families, `K` and `norm` are the mass accretion rate divided by
+the square of the source distance, in solar masses per year per square parsec.
+Use `K = mdot / distance_pc^2` when converting a physical accretion rate
+`mdot` in solar masses per year. The model includes the geometric factor of
+`1/(4π)`. The signed `redshift` defaults to zero and only shifts the
+spectrum. A negative value blueshifts the lines.
 
 ```julia
 model = Bvcoolflow(db; lowT = 0.3, highT = 4.0, redshift = 0.08,
@@ -158,7 +161,7 @@ flux = invokemodel(edges, model)
 
 local_model = LocalCoolflow(db; lowT = 0.2, highT = 1.2,
     redshift = FitParam(-0.0002; lower_limit = -0.01, upper_limit = 0.01),
-    distance_mpc = 0.002, K = 1e-9)
+    K = 2.5e-16)  # 1e-9 solar masses per year at 2,000 pc
 local_flux = invokemodel(edges, local_model)
 ```
 

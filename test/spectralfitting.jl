@@ -108,6 +108,8 @@ end
         fixed = Coolflow(db; K, redshift, distance_mpc, normalization_redshift = 0.0, bolometric = :direct)
         rest = Coolflow(db; K, redshift = 0.0, distance_mpc, bolometric = :direct)
         @test invokemodel(edges ./ (1 + redshift), fixed) ≈ invokemodel(edges, rest)
+        local_K = K / (1e6 * distance_mpc)^2
+        @test invokemodel(edges, LocalCoolflow(db; K = local_K, bolometric = :direct)) ≈ invokemodel(edges, rest)
         for (constructor, evaluator, kwargs) in (
                 (LocalCoolflow, localcoolflow, (;)),
                 (LocalVcoolflow, localvcoolflow, (; Fe = 0.5)),
@@ -118,10 +120,10 @@ end
                 (LocalBcph, localbcph, (; velocity = 200.0)),
                 (LocalBvcph, localbvcph, (; Na = 0.3, velocity = 200.0)))
             z = -0.125
-            model = constructor(db; K, distance_mpc, redshift = z, kwargs...)
+            model = constructor(db; K = local_K, redshift = z, kwargs...)
             @test model.redshift.lower_limit < z
-            @test invokemodel(edges, model) ≈ evaluator(edges, db; norm = K, distance_mpc, redshift = z, kwargs...)
-            @test invokemodel(edges ./ (1 + z), model) ≈ evaluator(edges, db; norm = K, distance_mpc, kwargs...)
+            @test invokemodel(edges, model) ≈ evaluator(edges, db; norm = local_K, redshift = z, kwargs...)
+            @test invokemodel(edges ./ (1 + z), model) ≈ evaluator(edges, db; norm = local_K, kwargs...)
         end
         @test isfinite(SpectralFitting.ForwardDiff.derivative(0.08) do z
             sum(coolflow(edges, db; redshift = z))

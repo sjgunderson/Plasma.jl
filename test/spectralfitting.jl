@@ -105,6 +105,9 @@ end
             @test isapprox(invokemodel(edges, model + model), 2 .* expected)
         end
         @test Mkcflow === Coolflow && Vmcflow === Vcoolflow
+        fixed = Coolflow(db; K, redshift, distance_mpc, normalization_redshift = 0.0, bolometric = :direct)
+        rest = Coolflow(db; K, redshift = 0.0, distance_mpc, bolometric = :direct)
+        @test invokemodel(edges ./ (1 + redshift), fixed) ≈ invokemodel(edges, rest)
         @test isfinite(SpectralFitting.ForwardDiff.derivative(0.08) do z
             sum(coolflow(edges, db; redshift = z))
         end)

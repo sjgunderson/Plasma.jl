@@ -127,17 +127,25 @@ count, analogous to the XSPEC setting `CFLOW_NTEMPS`.
 The cooling-plus-heating models follow the effective XSPEC 12.15 heating
 prescription. At `peakT ≥ 1` keV the heating term uses a 1 keV emissivity
 reference and scales as `(T/peakT)^2.5`. For `peakT < 1` keV the model uses
-cooling alone. Plasma integrates the tabulated continuum and resolved lines
-directly for the bolometric emissivity. XSPEC estimates it on an energy grid.
-The difference can be amplified when cooling and heating nearly cancel.
+cooling alone. By default, `bolometric=:xspec` calculates the bolometric
+emissivity in Julia using XSPEC's 1,000 logarithmic AtomDB energy edges
+from 0.0105 to 1,000 keV and bin-midpoint weighting. Use
+`bolometric=:direct` to integrate the tabulated continuum and use the
+original energies of resolved lines. The choice can have a large effect on
+`cph` where heating and cooling nearly cancel.
 
 The standalone `norm` and the SpectralFitting `K` are mass accretion rates
 in solar masses per year. The default `CoolingCosmology()` uses
 `H0=70.0`, `q0=0.0`, and `lambda0=0.73` to determine distance from
-`redshift`. For a local source, or to supply an independently measured
-luminosity distance, set `distance_mpc`. Redshift still shifts the spectrum.
-The `V` and `B` variants follow the abundance and broadening conventions
-of `Cempow`.
+`redshift`. Set `distance_mpc` to supply an independently measured distance.
+By default, `redshift` also supplies the normalization's photon arrival-rate
+factor. Set `normalization_redshift` to fix both redshift-dependent parts of
+the normalization while varying the spectral shift with `redshift`.
+A positive `normalization_redshift` can supply the cosmological distance.
+For a shift-only redshift and a known distance, set `distance_mpc` and
+`normalization_redshift=0.0`. These options apply to both model families.
+The `V` and `B` variants follow the abundance and broadening conventions of
+`Cempow`.
 
 ```julia
 model = Bvcoolflow(db; lowT = 0.3, highT = 4.0, redshift = 0.08,
@@ -145,7 +153,7 @@ model = Bvcoolflow(db; lowT = 0.3, highT = 4.0, redshift = 0.08,
 flux = invokemodel(edges, model)
 
 local_flux = coolflow(edges, db; lowT = 0.2, highT = 1.2,
-    redshift = 0.0, distance_mpc = 0.002, norm = 1e-9)
+    redshift = 0.0002, distance_mpc = 0.002, normalization_redshift = 0.0, norm = 1e-9)
 ```
 
 ## Validation

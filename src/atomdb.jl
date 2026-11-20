@@ -32,6 +32,7 @@ struct AtomDB
     temperatures::Vector{Float64}
     slices::Vector{Union{Nothing,TemperatureSlice}}
     bolometric::Vector{Union{Nothing,NTuple{30,Float64}}}
+    direct_bolometric::Vector{Union{Nothing,NTuple{30,Float64}}}
     cache_lock::ReentrantLock
 
     function AtomDB(linefile::AbstractString, cocofile::AbstractString)
@@ -42,7 +43,7 @@ struct AtomDB
             throw(ArgumentError("AtomDB line and continuum files have different temperature grids"))
         slices = Vector{Union{Nothing,TemperatureSlice}}(nothing, length(line_temperatures))
         bolometric = Vector{Union{Nothing,NTuple{30,Float64}}}(nothing, length(line_temperatures))
-        return new(linepath, cocopath, line_temperatures, slices, bolometric, ReentrantLock())
+        return new(linepath, cocopath, line_temperatures, slices, bolometric, copy(bolometric), ReentrantLock())
     end
 end
 

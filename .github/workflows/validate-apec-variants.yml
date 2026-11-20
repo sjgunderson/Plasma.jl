@@ -1,149 +1,320 @@
-name: Inspect public HEASoft model source
+name: Inspect public XSPEC cooling routine
 on: [push]
 permissions:
   contents: read
+defaults:
+  run:
+    shell: bash
+env:
+  JULIA_PKG_PRECOMPILE_AUTO: '0'
 jobs:
-  source:
+  reference:
     runs-on: ubuntu-latest
-    timeout-minutes: 9
+    timeout-minutes: 12
     outputs:
-      part0: ${{ steps.inspect.outputs.part0 }}
-      part1: ${{ steps.inspect.outputs.part1 }}
-      part2: ${{ steps.inspect.outputs.part2 }}
-      part3: ${{ steps.inspect.outputs.part3 }}
-      part4: ${{ steps.inspect.outputs.part4 }}
-      part5: ${{ steps.inspect.outputs.part5 }}
-      part6: ${{ steps.inspect.outputs.part6 }}
-      part7: ${{ steps.inspect.outputs.part7 }}
-      part8: ${{ steps.inspect.outputs.part8 }}
-      part9: ${{ steps.inspect.outputs.part9 }}
-      part10: ${{ steps.inspect.outputs.part10 }}
-      part11: ${{ steps.inspect.outputs.part11 }}
-      part12: ${{ steps.inspect.outputs.part12 }}
-      part13: ${{ steps.inspect.outputs.part13 }}
-      part14: ${{ steps.inspect.outputs.part14 }}
-      part15: ${{ steps.inspect.outputs.part15 }}
-      part16: ${{ steps.inspect.outputs.part16 }}
-      part17: ${{ steps.inspect.outputs.part17 }}
-      part18: ${{ steps.inspect.outputs.part18 }}
-      part19: ${{ steps.inspect.outputs.part19 }}
-      part20: ${{ steps.inspect.outputs.part20 }}
-      part21: ${{ steps.inspect.outputs.part21 }}
-      part22: ${{ steps.inspect.outputs.part22 }}
-      part23: ${{ steps.inspect.outputs.part23 }}
-      part24: ${{ steps.inspect.outputs.part24 }}
-      part25: ${{ steps.inspect.outputs.part25 }}
-      part26: ${{ steps.inspect.outputs.part26 }}
-      part27: ${{ steps.inspect.outputs.part27 }}
-      part28: ${{ steps.inspect.outputs.part28 }}
-      part29: ${{ steps.inspect.outputs.part29 }}
-      part30: ${{ steps.inspect.outputs.part30 }}
-      part31: ${{ steps.inspect.outputs.part31 }}
-      part32: ${{ steps.inspect.outputs.part32 }}
-      part33: ${{ steps.inspect.outputs.part33 }}
-      part34: ${{ steps.inspect.outputs.part34 }}
-      part35: ${{ steps.inspect.outputs.part35 }}
-      part36: ${{ steps.inspect.outputs.part36 }}
-      part37: ${{ steps.inspect.outputs.part37 }}
+      part0: ${{ steps.weights.outputs.part0 }}
+      part1: ${{ steps.weights.outputs.part1 }}
+      part2: ${{ steps.weights.outputs.part2 }}
+      part3: ${{ steps.weights.outputs.part3 }}
+      part4: ${{ steps.weights.outputs.part4 }}
+      part5: ${{ steps.weights.outputs.part5 }}
+      part6: ${{ steps.weights.outputs.part6 }}
+      part7: ${{ steps.weights.outputs.part7 }}
+      part8: ${{ steps.weights.outputs.part8 }}
+      part9: ${{ steps.weights.outputs.part9 }}
+      part10: ${{ steps.weights.outputs.part10 }}
+      part11: ${{ steps.weights.outputs.part11 }}
+      part12: ${{ steps.weights.outputs.part12 }}
+      part13: ${{ steps.weights.outputs.part13 }}
+      part14: ${{ steps.weights.outputs.part14 }}
+      part15: ${{ steps.weights.outputs.part15 }}
+      part16: ${{ steps.weights.outputs.part16 }}
+      part17: ${{ steps.weights.outputs.part17 }}
+      part18: ${{ steps.weights.outputs.part18 }}
+      part19: ${{ steps.weights.outputs.part19 }}
+      part20: ${{ steps.weights.outputs.part20 }}
+      part21: ${{ steps.weights.outputs.part21 }}
+      part22: ${{ steps.weights.outputs.part22 }}
+      part23: ${{ steps.weights.outputs.part23 }}
+      part24: ${{ steps.weights.outputs.part24 }}
+      part25: ${{ steps.weights.outputs.part25 }}
+      part26: ${{ steps.weights.outputs.part26 }}
+      part27: ${{ steps.weights.outputs.part27 }}
+      part28: ${{ steps.weights.outputs.part28 }}
+      part29: ${{ steps.weights.outputs.part29 }}
+      part30: ${{ steps.weights.outputs.part30 }}
+      part31: ${{ steps.weights.outputs.part31 }}
+      part32: ${{ steps.weights.outputs.part32 }}
+      part33: ${{ steps.weights.outputs.part33 }}
+      part34: ${{ steps.weights.outputs.part34 }}
+      part35: ${{ steps.weights.outputs.part35 }}
+      part36: ${{ steps.weights.outputs.part36 }}
+      part37: ${{ steps.weights.outputs.part37 }}
+      part38: ${{ steps.weights.outputs.part38 }}
+      part39: ${{ steps.weights.outputs.part39 }}
+      part40: ${{ steps.weights.outputs.part40 }}
+      part41: ${{ steps.weights.outputs.part41 }}
+      part42: ${{ steps.weights.outputs.part42 }}
+      part43: ${{ steps.weights.outputs.part43 }}
+      part44: ${{ steps.weights.outputs.part44 }}
+      part45: ${{ steps.weights.outputs.part45 }}
+      part46: ${{ steps.weights.outputs.part46 }}
+      part47: ${{ steps.weights.outputs.part47 }}
+      part48: ${{ steps.weights.outputs.part48 }}
+      part49: ${{ steps.weights.outputs.part49 }}
+      part50: ${{ steps.weights.outputs.part50 }}
+      part51: ${{ steps.weights.outputs.part51 }}
+      part52: ${{ steps.weights.outputs.part52 }}
+      part53: ${{ steps.weights.outputs.part53 }}
+      part54: ${{ steps.weights.outputs.part54 }}
+      part55: ${{ steps.weights.outputs.part55 }}
+      part56: ${{ steps.weights.outputs.part56 }}
+      part57: ${{ steps.weights.outputs.part57 }}
+      part58: ${{ steps.weights.outputs.part58 }}
+      part59: ${{ steps.weights.outputs.part59 }}
+      part60: ${{ steps.weights.outputs.part60 }}
+      part61: ${{ steps.weights.outputs.part61 }}
+      part62: ${{ steps.weights.outputs.part62 }}
+      part63: ${{ steps.weights.outputs.part63 }}
+      part64: ${{ steps.weights.outputs.part64 }}
+      part65: ${{ steps.weights.outputs.part65 }}
+      part66: ${{ steps.weights.outputs.part66 }}
+      part67: ${{ steps.weights.outputs.part67 }}
+      part68: ${{ steps.weights.outputs.part68 }}
+      part69: ${{ steps.weights.outputs.part69 }}
+      part70: ${{ steps.weights.outputs.part70 }}
+      part71: ${{ steps.weights.outputs.part71 }}
+      part72: ${{ steps.weights.outputs.part72 }}
+      part73: ${{ steps.weights.outputs.part73 }}
+      part74: ${{ steps.weights.outputs.part74 }}
+      part75: ${{ steps.weights.outputs.part75 }}
+      part76: ${{ steps.weights.outputs.part76 }}
+      part77: ${{ steps.weights.outputs.part77 }}
+      part78: ${{ steps.weights.outputs.part78 }}
+      part79: ${{ steps.weights.outputs.part79 }}
+      part80: ${{ steps.weights.outputs.part80 }}
+      part81: ${{ steps.weights.outputs.part81 }}
+      part82: ${{ steps.weights.outputs.part82 }}
+      part83: ${{ steps.weights.outputs.part83 }}
+      part84: ${{ steps.weights.outputs.part84 }}
     steps:
-      - name: Retrieve the XSPEC cooling model implementation
-        id: inspect
-        shell: bash
+      - uses: actions/checkout@v4
+      - uses: julia-actions/setup-julia@v2
+        with:
+          version: '1.10'
+      - name: Install LibXSPEC
         run: |
-          mkdir "$RUNNER_TEMP/upstream"
-          cd "$RUNNER_TEMP/upstream"
-          curl -fsSL --retry 1 --max-time 270 https://heasarc.gsfc.nasa.gov/FTP/software/lheasoft/lheasoft6.35.2/heasoft-6.35.2src.tar.gz | tar xzf - --wildcards '*/Xspec/src/XSFunctions/*'
-          ls */Xspec/src/XSFunctions | grep -Ei 'cool|cph|xsvmcf|sumdem'
-          {
-          ls */Xspec/src/XSFunctions | grep -Ei 'cool|cph|xsvmcf|sumdem'
-          grep -inE 'pow\(|bolo|peak|norm =|CFLOW|dlog|cph' */Xspec/src/XSFunctions/{coolflow,cph,xsvmcf,sumdem,calcMultiTempPlasma}.cxx | sed -E 's|^.+/([^/]+\.cxx):|\1: |' | cut -c1-110
-          } > "$RUNNER_TEMP/excerpts"
-          python - <<'PY'
-          import os
+          julia --project="$RUNNER_TEMP/refenv" -e '
+            using Pkg
+            Pkg.Registry.add("General")
+            Pkg.Registry.add(Pkg.RegistrySpec(url="https://github.com/astro-group-bristol/AstroRegistry"))
+            Pkg.add(Pkg.PackageSpec(name="LibXSPEC_jll",version="6.35.1"))
+          '
+      - name: Read cooling model symbols and disassembly
+        id: weights
+        run: |
+          lib=$(julia --project="$RUNNER_TEMP/refenv" -e 'using LibXSPEC_jll; print(LibXSPEC_jll.libXSFunctions)')
+          python - "$lib" <<'PY'
           from pathlib import Path
-          lines=Path(os.environ["RUNNER_TEMP"],"excerpts").read_text().splitlines()
+          import re, subprocess, sys, os, gzip, base64
+          library=sys.argv[1]
+          symbols=subprocess.check_output(["nm","-S","--defined-only",library],text=True)
+          candidates=[line for line in symbols.splitlines() if re.search(r'coolflow|xs.?cfl|xsvmcf|calcBolo|xscph|C_cph|[^a-z]cph$',line,re.I)]
+          print(*candidates, sep="\n")
+          selected=[line for line in candidates if not re.search(r'C_[bv]|_cold|[bv]coolflow',line) and re.search(r'coolflow|xs.?cfl|^.* T _Z3cph',line,re.I)]
+          lines=[]
+          for candidate in selected:
+              _,size,_,sym=candidate.split()
+              if int(size,16)>12000:
+                  continue
+              dis=subprocess.check_output(["objdump","-Cd","--disassemble="+sym,library],text=True)
+              if 'Disassembly of section .text:\n\n\n' in dis:
+                  dis=subprocess.check_output(["objdump","-d","--disassemble="+sym,library],text=True)
+              insns=[]
+              for row in dis.splitlines():
+                  if "\t" in row:
+                      r=row.split("\t")
+                      insns.append(r[0].strip()+": "+r[-1].strip())
+              lines.extend(["-- "+candidate, *insns])
+          payload="\n".join([*candidates, "", *lines])
+          print(payload)
+          encoded=base64.b64encode(gzip.compress(payload.encode())).decode()
           with open(os.environ["GITHUB_OUTPUT"],"a") as out:
-              for i in range(38):
-                  print("part" + str(i) + "=" + " / ".join(lines[3*i:3*i+3]), file=out)
+              for i in range(85):
+                  print(f"part{i}="+encoded[190*i:190*(i+1)],file=out)
           PY
   report:
     if: always()
-    needs: source
+    needs: reference
     runs-on: ubuntu-latest
     steps:
-      - name: "part0 ${{ needs.source.outputs.part0 }}"
+      - name: "part0 ${{ needs.reference.outputs.part0 }}"
         run: 'true'
-      - name: "part1 ${{ needs.source.outputs.part1 }}"
+      - name: "part1 ${{ needs.reference.outputs.part1 }}"
         run: 'true'
-      - name: "part2 ${{ needs.source.outputs.part2 }}"
+      - name: "part2 ${{ needs.reference.outputs.part2 }}"
         run: 'true'
-      - name: "part3 ${{ needs.source.outputs.part3 }}"
+      - name: "part3 ${{ needs.reference.outputs.part3 }}"
         run: 'true'
-      - name: "part4 ${{ needs.source.outputs.part4 }}"
+      - name: "part4 ${{ needs.reference.outputs.part4 }}"
         run: 'true'
-      - name: "part5 ${{ needs.source.outputs.part5 }}"
+      - name: "part5 ${{ needs.reference.outputs.part5 }}"
         run: 'true'
-      - name: "part6 ${{ needs.source.outputs.part6 }}"
+      - name: "part6 ${{ needs.reference.outputs.part6 }}"
         run: 'true'
-      - name: "part7 ${{ needs.source.outputs.part7 }}"
+      - name: "part7 ${{ needs.reference.outputs.part7 }}"
         run: 'true'
-      - name: "part8 ${{ needs.source.outputs.part8 }}"
+      - name: "part8 ${{ needs.reference.outputs.part8 }}"
         run: 'true'
-      - name: "part9 ${{ needs.source.outputs.part9 }}"
+      - name: "part9 ${{ needs.reference.outputs.part9 }}"
         run: 'true'
-      - name: "part10 ${{ needs.source.outputs.part10 }}"
+      - name: "part10 ${{ needs.reference.outputs.part10 }}"
         run: 'true'
-      - name: "part11 ${{ needs.source.outputs.part11 }}"
+      - name: "part11 ${{ needs.reference.outputs.part11 }}"
         run: 'true'
-      - name: "part12 ${{ needs.source.outputs.part12 }}"
+      - name: "part12 ${{ needs.reference.outputs.part12 }}"
         run: 'true'
-      - name: "part13 ${{ needs.source.outputs.part13 }}"
+      - name: "part13 ${{ needs.reference.outputs.part13 }}"
         run: 'true'
-      - name: "part14 ${{ needs.source.outputs.part14 }}"
+      - name: "part14 ${{ needs.reference.outputs.part14 }}"
         run: 'true'
-      - name: "part15 ${{ needs.source.outputs.part15 }}"
+      - name: "part15 ${{ needs.reference.outputs.part15 }}"
         run: 'true'
-      - name: "part16 ${{ needs.source.outputs.part16 }}"
+      - name: "part16 ${{ needs.reference.outputs.part16 }}"
         run: 'true'
-      - name: "part17 ${{ needs.source.outputs.part17 }}"
+      - name: "part17 ${{ needs.reference.outputs.part17 }}"
         run: 'true'
-      - name: "part18 ${{ needs.source.outputs.part18 }}"
+      - name: "part18 ${{ needs.reference.outputs.part18 }}"
         run: 'true'
-      - name: "part19 ${{ needs.source.outputs.part19 }}"
+      - name: "part19 ${{ needs.reference.outputs.part19 }}"
         run: 'true'
-      - name: "part20 ${{ needs.source.outputs.part20 }}"
+      - name: "part20 ${{ needs.reference.outputs.part20 }}"
         run: 'true'
-      - name: "part21 ${{ needs.source.outputs.part21 }}"
+      - name: "part21 ${{ needs.reference.outputs.part21 }}"
         run: 'true'
-      - name: "part22 ${{ needs.source.outputs.part22 }}"
+      - name: "part22 ${{ needs.reference.outputs.part22 }}"
         run: 'true'
-      - name: "part23 ${{ needs.source.outputs.part23 }}"
+      - name: "part23 ${{ needs.reference.outputs.part23 }}"
         run: 'true'
-      - name: "part24 ${{ needs.source.outputs.part24 }}"
+      - name: "part24 ${{ needs.reference.outputs.part24 }}"
         run: 'true'
-      - name: "part25 ${{ needs.source.outputs.part25 }}"
+      - name: "part25 ${{ needs.reference.outputs.part25 }}"
         run: 'true'
-      - name: "part26 ${{ needs.source.outputs.part26 }}"
+      - name: "part26 ${{ needs.reference.outputs.part26 }}"
         run: 'true'
-      - name: "part27 ${{ needs.source.outputs.part27 }}"
+      - name: "part27 ${{ needs.reference.outputs.part27 }}"
         run: 'true'
-      - name: "part28 ${{ needs.source.outputs.part28 }}"
+      - name: "part28 ${{ needs.reference.outputs.part28 }}"
         run: 'true'
-      - name: "part29 ${{ needs.source.outputs.part29 }}"
+      - name: "part29 ${{ needs.reference.outputs.part29 }}"
         run: 'true'
-      - name: "part30 ${{ needs.source.outputs.part30 }}"
+      - name: "part30 ${{ needs.reference.outputs.part30 }}"
         run: 'true'
-      - name: "part31 ${{ needs.source.outputs.part31 }}"
+      - name: "part31 ${{ needs.reference.outputs.part31 }}"
         run: 'true'
-      - name: "part32 ${{ needs.source.outputs.part32 }}"
+      - name: "part32 ${{ needs.reference.outputs.part32 }}"
         run: 'true'
-      - name: "part33 ${{ needs.source.outputs.part33 }}"
+      - name: "part33 ${{ needs.reference.outputs.part33 }}"
         run: 'true'
-      - name: "part34 ${{ needs.source.outputs.part34 }}"
+      - name: "part34 ${{ needs.reference.outputs.part34 }}"
         run: 'true'
-      - name: "part35 ${{ needs.source.outputs.part35 }}"
+      - name: "part35 ${{ needs.reference.outputs.part35 }}"
         run: 'true'
-      - name: "part36 ${{ needs.source.outputs.part36 }}"
+      - name: "part36 ${{ needs.reference.outputs.part36 }}"
         run: 'true'
-      - name: "part37 ${{ needs.source.outputs.part37 }}"
+      - name: "part37 ${{ needs.reference.outputs.part37 }}"
+        run: 'true'
+      - name: "part38 ${{ needs.reference.outputs.part38 }}"
+        run: 'true'
+      - name: "part39 ${{ needs.reference.outputs.part39 }}"
+        run: 'true'
+      - name: "part40 ${{ needs.reference.outputs.part40 }}"
+        run: 'true'
+      - name: "part41 ${{ needs.reference.outputs.part41 }}"
+        run: 'true'
+      - name: "part42 ${{ needs.reference.outputs.part42 }}"
+        run: 'true'
+      - name: "part43 ${{ needs.reference.outputs.part43 }}"
+        run: 'true'
+      - name: "part44 ${{ needs.reference.outputs.part44 }}"
+        run: 'true'
+      - name: "part45 ${{ needs.reference.outputs.part45 }}"
+        run: 'true'
+      - name: "part46 ${{ needs.reference.outputs.part46 }}"
+        run: 'true'
+      - name: "part47 ${{ needs.reference.outputs.part47 }}"
+        run: 'true'
+      - name: "part48 ${{ needs.reference.outputs.part48 }}"
+        run: 'true'
+      - name: "part49 ${{ needs.reference.outputs.part49 }}"
+        run: 'true'
+      - name: "part50 ${{ needs.reference.outputs.part50 }}"
+        run: 'true'
+      - name: "part51 ${{ needs.reference.outputs.part51 }}"
+        run: 'true'
+      - name: "part52 ${{ needs.reference.outputs.part52 }}"
+        run: 'true'
+      - name: "part53 ${{ needs.reference.outputs.part53 }}"
+        run: 'true'
+      - name: "part54 ${{ needs.reference.outputs.part54 }}"
+        run: 'true'
+      - name: "part55 ${{ needs.reference.outputs.part55 }}"
+        run: 'true'
+      - name: "part56 ${{ needs.reference.outputs.part56 }}"
+        run: 'true'
+      - name: "part57 ${{ needs.reference.outputs.part57 }}"
+        run: 'true'
+      - name: "part58 ${{ needs.reference.outputs.part58 }}"
+        run: 'true'
+      - name: "part59 ${{ needs.reference.outputs.part59 }}"
+        run: 'true'
+      - name: "part60 ${{ needs.reference.outputs.part60 }}"
+        run: 'true'
+      - name: "part61 ${{ needs.reference.outputs.part61 }}"
+        run: 'true'
+      - name: "part62 ${{ needs.reference.outputs.part62 }}"
+        run: 'true'
+      - name: "part63 ${{ needs.reference.outputs.part63 }}"
+        run: 'true'
+      - name: "part64 ${{ needs.reference.outputs.part64 }}"
+        run: 'true'
+      - name: "part65 ${{ needs.reference.outputs.part65 }}"
+        run: 'true'
+      - name: "part66 ${{ needs.reference.outputs.part66 }}"
+        run: 'true'
+      - name: "part67 ${{ needs.reference.outputs.part67 }}"
+        run: 'true'
+      - name: "part68 ${{ needs.reference.outputs.part68 }}"
+        run: 'true'
+      - name: "part69 ${{ needs.reference.outputs.part69 }}"
+        run: 'true'
+      - name: "part70 ${{ needs.reference.outputs.part70 }}"
+        run: 'true'
+      - name: "part71 ${{ needs.reference.outputs.part71 }}"
+        run: 'true'
+      - name: "part72 ${{ needs.reference.outputs.part72 }}"
+        run: 'true'
+      - name: "part73 ${{ needs.reference.outputs.part73 }}"
+        run: 'true'
+      - name: "part74 ${{ needs.reference.outputs.part74 }}"
+        run: 'true'
+      - name: "part75 ${{ needs.reference.outputs.part75 }}"
+        run: 'true'
+      - name: "part76 ${{ needs.reference.outputs.part76 }}"
+        run: 'true'
+      - name: "part77 ${{ needs.reference.outputs.part77 }}"
+        run: 'true'
+      - name: "part78 ${{ needs.reference.outputs.part78 }}"
+        run: 'true'
+      - name: "part79 ${{ needs.reference.outputs.part79 }}"
+        run: 'true'
+      - name: "part80 ${{ needs.reference.outputs.part80 }}"
+        run: 'true'
+      - name: "part81 ${{ needs.reference.outputs.part81 }}"
+        run: 'true'
+      - name: "part82 ${{ needs.reference.outputs.part82 }}"
+        run: 'true'
+      - name: "part83 ${{ needs.reference.outputs.part83 }}"
+        run: 'true'
+      - name: "part84 ${{ needs.reference.outputs.part84 }}"
         run: 'true'

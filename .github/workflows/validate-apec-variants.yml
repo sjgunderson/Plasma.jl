@@ -53,6 +53,11 @@ jobs:
           ccall((:FNINIT, xs), Cvoid, ())
           setx(key, val) = ccall((:FPMSTR, xs), Cvoid, (Cstring, Cstring), key, val)
           setx("APECROOT", ARGS[1])
+          for (key,value) in zip((:csmph0,:csmpq0,:csmpl0), (70.,0.,.73))
+              p = dlsym_e(h,key)
+              p == C_NULL && (p = dlsym_e(util,key))
+              p == C_NULL || ccall(p,Cvoid,(Cfloat,),value)
+          end
           function report(key, text)
               println(key, "=", text)
               open(ENV["GITHUB_OUTPUT"], "a") do io
@@ -64,7 +69,6 @@ jobs:
               p == C_NULL && (p = dlsym_e(util, key))
               return p == C_NULL ? NaN : ccall(p, Cfloat, ())
           end
-          report("cosmo", join(cosmology.((:csmgh0,:csmgq0,:csmgl0)), ","))
           function weights(symbol)
               p = Ptr{Ptr{Float64}}(dlsym(h, symbol))
               start, stop = unsafe_load(p,1), unsafe_load(p,2)
@@ -98,8 +102,9 @@ jobs:
                   endpoint = (i==1 || i==length(t)) ? .5 : 1.
                   w[i]*bolo/(t[i]*dlog*endpoint)
               end
-              report(label*"scale",join(fmt.(converted),","))
+              report(label*"scale",join(fmt.(converted),",") * " W=" * join(fmt.(w),","))
           end
+          report("cosmo", join(cosmology.((:csmgh0,:csmgq0,:csmgl0)), ",") * " APEC=" * string(sum(spectrum(:C_apec,output_edges,[1.,1.,0.]))))
           runflow("cool",:C_coolflow,[.1,4.,.7,.08,2.],.08,.7)
           runflow("old",:C_xsmkcf,[.1,4.,.7,.08,2.],.08,.7)
           runflow("short",:C_coolflow,[.3,4.,.7,.20,2.],.2,.7; number=7)

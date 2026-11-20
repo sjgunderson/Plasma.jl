@@ -1,6 +1,6 @@
 # Plasma.jl
 
-Plasma.jl evaluates the single-temperature XSPEC APEC family in Julia using
+Plasma.jl evaluates the XSPEC APEC, Wdem, and Cempow families in Julia using
 AtomDB's precomputed CIE emissivities. Supply the matching
 `*_line.fits` and `*_coco.fits` files from AtomDB or an XSPEC installation.
 The loader accepts fixed-width and variable-length continuum columns.
@@ -76,6 +76,38 @@ Element and velocity parameters start frozen when supplied as numbers. Pass a
 `K_abundance` for potassium because `K` is the additive normalization.
 The direct `vvapec` and `bvvapec` functions accept `K` for potassium and
 `norm` for normalization.
+
+## Multi-temperature models
+
+| Family | SpectralFitting constructors | Standalone evaluators |
+| --- | --- | --- |
+| Wdem | `Wdem`, `Vwdem`, `Vvwdem`, `Bwdem`, `Bvwdem`, `Bvvwdem` | `wdem`, `vwdem`, `vvwdem`, `bwdem`, `bvwdem`, `bvvwdem` |
+| Cempow | `Cempow`, `Vcempow`, `Bcempow`, `Bvcempow` | `cempow`, `vcempow`, `bcempow`, `bvcempow` |
+
+`Wdem` takes `Tmax` in keV, `beta = Tmin/Tmax`, and `inv_slope`. The XSPEC
+sampling integrates `T^(1/inv_slope)` in 51 intervals of width
+`(Tmax - Tmin)/50`, including the final interval above `Tmax`. Its weights sum
+to 1. When `beta=1`, Plasma uses the single-temperature limit at `Tmax`.
+
+`Cempow` takes `alpha` and `Tmax`. It steps down from `Tmax` by 0.1 dex to
+0.02725 keV and retains the absolute `0.1*(T/Tmax)^alpha` weights. Their sum
+varies with `alpha`.
+
+The standalone `norm` and SpectralFitting `K` scale the resulting spectrum.
+The `V` models fit He and 13 metals, including Na. The `Vv` models fit H
+through Zn, using `K_abundance` for potassium in SpectralFitting. The `B`
+models enable thermal broadening by default and accept a `velocity` sigma
+in km/s. The abundance and trace settings follow the APEC interface.
+These models use the AtomDB CIE backend (`switch=2`). `nH` is accepted as a
+compatibility keyword and does not enter the AtomDB calculation.
+
+```julia
+source = Bvwdem(db; Tmax=1.5, beta=FitParam(0.15), inv_slope=0.25,
+                Fe=FitParam(0.5), velocity=FitParam(200.0), K=1e-3)
+flux = invokemodel(edges, source)
+
+other_flux = cempow(edges, db; Tmax=1.5, alpha=0.8, norm=1e-3)
+```
 
 ## Validation
 

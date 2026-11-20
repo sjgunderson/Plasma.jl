@@ -6,7 +6,8 @@ import Plasma: Apec, Bapec, Vapec, Vvapec, Bvapec, Bvvapec
 using SpectralFitting: AbstractSpectralModel, Additive, FitParam
 import SpectralFitting
 
-abstract type AbstractApecModel{T} <: AbstractSpectralModel{T,Additive} end
+abstract type AbstractCIEModel{T} <: AbstractSpectralModel{T,Additive} end
+abstract type AbstractApecModel{T} <: AbstractCIEModel{T} end
 
 # SpectralFitting reserves K for additive normalization. Keep potassium separate.
 const VVAPEC_PARAMETER_NAMES = map(name -> name === :K ? :K_abundance : name, ELEMENT_NAMES)
@@ -97,21 +98,23 @@ end
 
 model_abundances(model::Union{VvapecModel,BvvapecModel}) =
     map(name -> getfield(model, name), VVAPEC_PARAMETER_NAMES)
-model_velocity(::AbstractApecModel) = 0.0
+model_velocity(::AbstractCIEModel) = 0.0
 model_velocity(model::Union{BapecModel,BvapecModel,BvvapecModel}) = model.velocity
 
-function Base.copy(model::AbstractApecModel{<:FitParam})
+function Base.copy(model::AbstractCIEModel{<:FitParam})
     parameters = copy.(SpectralFitting.parameter_vector(model))
     # Reuse the AtomDB cache and immutable options across copied components.
     return SpectralFitting.remake_with_parameters(model, parameters)
 end
 
-Base.copy(model::AbstractApecModel{<:Number}) = model
+Base.copy(model::AbstractCIEModel{<:Number}) = model
 
 function SpectralFitting.invoke!(output, edges, model::AbstractApecModel)
     # SpectralFitting applies K when invoking an additive model.
     return evaluate_apec!(output, edges, model.db, model_abundances(model), model.options;
         kT = model.kT, redshift = model.redshift, velocity = model_velocity(model))
 end
+
+include("dem.jl")
 
 end

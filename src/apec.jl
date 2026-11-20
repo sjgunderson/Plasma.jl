@@ -63,21 +63,30 @@ end
 
 function evaluate_apec(edges::AbstractVector, db, abundances, options;
         kT::Real = 1.0, redshift::Real = 0.0, norm::Real = 1.0, velocity::Real = 0.0)
-    T = promote_type(Float64, eltype(edges), typeof(kT), typeof(redshift), typeof(norm),
-        typeof(velocity), map(typeof, abundances)...)
-    output = Vector{T}(undef, max(0, length(edges) - 1))
-    return evaluate_apec!(output, edges, db, abundances, options; kT, redshift, norm, velocity)
+    return evaluate_cie(edges, db, abundances, options, kT; redshift, norm, velocity)
 end
 
 function evaluate_apec!(output::AbstractVector, edges::AbstractVector, db, abundances, options;
         kT::Real = 1.0, redshift::Real = 0.0, norm::Real = 1.0, velocity::Real = 0.0)
+    return evaluate_cie!(output, edges, db, abundances, options, kT; redshift, norm, velocity)
+end
+
+emission_type(temperature::Real) = typeof(temperature)
+emission_type(node_weights::AbstractVector) = eltype(node_weights)
+
+function evaluate_cie(edges, db, abundances, options, emission; redshift, norm, velocity)
+    T = promote_type(Float64, eltype(edges), emission_type(emission), typeof(redshift), typeof(norm),
+        typeof(velocity), map(typeof, abundances)...)
+    output = Vector{T}(undef, max(0, length(edges) - 1))
+    return evaluate_cie!(output, edges, db, abundances, options, emission; redshift, norm, velocity)
+end
+
+function evaluate_cie!(output::AbstractVector, edges::AbstractVector, db, abundances, options, emission;
+        redshift, norm = 1.0, velocity)
     Base.require_one_based_indexing(output, edges)
     length(edges) >= 2 || throw(ArgumentError("At least two energy edges are required"))
     length(output) == length(edges) - 1 ||
         throw(DimensionMismatch("The output must have one entry per energy bin"))
-    if !(0 < kT && isfinite(kT))
-        throw(DomainError(kT, "Plasma temperature must be positive and finite"))
-    end
     if !all(value -> value isa Real && 0 <= value && isfinite(value), abundances)
         throw(DomainError(abundances, "Element abundances must be nonnegative and finite"))
     end
@@ -102,19 +111,41 @@ function evaluate_apec!(output::AbstractVector, edges::AbstractVector, db, abund
     fill!(output, zero(eltype(output)))
     scales = map(*, promote(abundances...), options.ratios)
 
-    temperatures = db.temperatures
+    add_emission!(output, source_edges, centers, widths, db, emission, scales, options.thermal, velocity)
+    output .*= 1.0e14 * norm / z1
+    return output
+end
+
+function temperature_bracket(temperatures, kT)
     lower = searchsortedlast(temperatures, kT)
     if lower == 0 || lower == length(temperatures) || kT == temperatures[lower]
         index = max(1, lower)
-        add_slice!(output, source_edges, centers, widths, db, index, scales, 1.0, options.thermal, velocity)
-    else
-        upper = lower + 1
-        fraction = (kT - temperatures[lower]) / (temperatures[upper] - temperatures[lower])
-        add_slice!(output, source_edges, centers, widths, db, lower, scales, 1 - fraction, options.thermal, velocity)
-        add_slice!(output, source_edges, centers, widths, db, upper, scales, fraction, options.thermal, velocity)
+        return index, index, zero(kT)
     end
-    output .*= 1.0e14 * norm / z1
-    return output
+    upper = lower + 1
+    fraction = (kT - temperatures[lower]) / (temperatures[upper] - temperatures[lower])
+    return lower, upper, fraction
+end
+
+function add_emission!(output, edges, centers, widths, db, kT::Real, scales, thermal, velocity)
+    if !(0 < kT && isfinite(kT))
+        throw(DomainError(kT, "Plasma temperature must be positive and finite"))
+    end
+    lower, upper, fraction = temperature_bracket(db.temperatures, kT)
+    add_slice!(output, edges, centers, widths, db, lower, scales, 1 - fraction, thermal, velocity)
+    if lower != upper
+        add_slice!(output, edges, centers, widths, db, upper, scales, fraction, thermal, velocity)
+    end
+    return nothing
+end
+
+function add_emission!(output, edges, centers, widths, db, weights::AbstractVector, scales, thermal, velocity)
+    for index in eachindex(weights)
+        weight = weights[index]
+        iszero(weight) && continue
+        add_slice!(output, edges, centers, widths, db, index, scales, weight, thermal, velocity)
+    end
+    return nothing
 end
 
 function add_slice!(output, edges, centers, widths, db, index, scales, weight, thermal, velocity)

@@ -6,11 +6,16 @@ using SpecialFunctions: erf
 export AtomDB, solar_abundances
 export Apec, Bapec, Vapec, Vvapec, Bvapec, Bvvapec
 export apec, apec!, bapec, vapec, vvapec, bvapec, bvvapec
+export Wdem, Vwdem, Vvwdem, Bwdem, Bvwdem, Bvvwdem
+export Cempow, Vcempow, Bcempow, Bvcempow
+export wdem, vwdem, vvwdem, bwdem, bvwdem, bvvwdem
+export cempow, vcempow, bcempow, bvcempow
 
 include("abundances.jl")
 include("atomdb.jl")
 include("broadening.jl")
 include("apec.jl")
+include("dem.jl")
 
 """
     Apec(db::AtomDB; K, kT, abundance, redshift)
@@ -37,5 +42,10 @@ function Bvapec end
 
 """Fit-ready Vvapec model with thermal and velocity broadening. `velocity` is in km/s."""
 function Bvvapec end
+
+# The SpectralFitting extension provides the constructors for these model types.
+for (_, constructor, _, _, _) in (WDEM_VARIANTS..., CEMPOW_VARIANTS...)
+    @eval function $constructor end
+end
 
 end

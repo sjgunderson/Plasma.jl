@@ -1,5 +1,7 @@
-name: Read the XSPEC bolometric energy grid
-on: [push]
+name: Inspect XSPEC cflow weighting and table metadata
+on:
+  push:
+    branches: [power-law-cflow-reference]
 permissions:
   contents: read
 defaults:
@@ -8,20 +10,22 @@ defaults:
 env:
   JULIA_PKG_PRECOMPILE_AUTO: '0'
 jobs:
-  reference:
+  inspect:
     runs-on: ubuntu-latest
-    timeout-minutes: 12
+    timeout-minutes: 8
     outputs:
-      grid: ${{ steps.metadata.outputs.grid }}
-      detail: ${{ steps.metadata.outputs.detail }}
-      distance: ${{ steps.metadata.outputs.distance }}
-      error: ${{ steps.metadata.outputs.error }}
+      file: ${{ steps.info.outputs.file }}
+      params: ${{ steps.info.outputs.params }}
+      energies: ${{ steps.info.outputs.energies }}
+      spectra: ${{ steps.info.outputs.spectra }}
+      sample: ${{ steps.info.outputs.sample }}
+      slope: ${{ steps.info.outputs.slope }}
+      error: ${{ steps.info.outputs.error }}
     steps:
-      - uses: actions/checkout@v4
       - uses: julia-actions/setup-julia@v2
         with:
           version: '1.10'
-      - name: Install LibXSPEC
+      - name: Install the reference library
         run: |
           julia --project="$RUNNER_TEMP/refenv" -e '
             using Pkg
@@ -29,66 +33,96 @@ jobs:
             Pkg.Registry.add(Pkg.RegistrySpec(url="https://github.com/astro-group-bristol/AstroRegistry"))
             Pkg.add(Pkg.PackageSpec(name="LibXSPEC_jll",version="6.35.1"))
           '
-      - name: Download the reference AtomDB FITS pair
+      - name: Read the legacy XSPEC table and calculation constants
+        id: info
         run: |
-          cd "$RUNNER_TEMP"
-          curl -fsSL --retry 1 --max-time 120 -o atomdb.tar.bz2 https://hea-www.cfa.harvard.edu/AtomDB/releases/atomdb_v3.1.3.tar.bz2
-          tar -xjf atomdb.tar.bz2 --wildcards '*/apec_v3.1.3_coco.fits' '*/apec_v3.1.3_line.fits'
-      - name: Read grid metadata
-        id: metadata
-        run: |
-          cat > "$RUNNER_TEMP/grid.jl" <<'JULIA'
-          using LibXSPEC_jll, Libdl, Printf
-          const lib = LibXSPEC_jll.libXSFunctions
-          const utilpath = LibXSPEC_jll.libXSUtil
-          ccall((:FNINIT, lib), Cvoid, ())
-          ccall((:FPMSTR, lib), Cvoid, (Cstring, Cstring), "APECROOT", ARGS[1])
-          function report(key, value)
-              open(ENV["GITHUB_OUTPUT"], "a") do io
-                  println(io,key,"=",value)
-              end
-          end
-          function find_symbol(library, target)
-              rows = split(read(`nm -D $library`, String),'\n')
-              return Symbol(last(split(first(filter(line -> occursin(target,line) && occursin(" T ",line), rows)))))
-          end
-          gridfn=find_symbol(lib,"plasmaFileInfo")
-          energy=zeros(UInt,2)
-          temp=zeros(UInt,2)
-          h=dlopen(lib)
-          status=ccall(dlsym(h,gridfn),Cint,(Cint,Ptr{UInt},Ptr{UInt}),6,energy,temp)
-          report("detail","symbol=$(gridfn) status=$(status) grid=$(energy[1]) temps=$(temp[1])")
-          es=unsafe_wrap(Vector{Float64},Ptr{Float64}(energy[2]),Int(energy[1]))
-          probes=unique([1,2,3,4,5,6,10,100,length(es)÷2,length(es)-1,length(es)])
-          report("grid",join(["$i:"*@sprintf("%.12g",es[i]) for i in probes if 1<=i<=length(es)],","))
-          if length(es)>3
-              report("detail","n=$(length(es)) max log-step error=$(maximum(abs,diff(log.(es)) .- log(es[end]/es[1])/(length(es)-1))) max linear-step error=$(maximum(abs,diff(es) .- (es[end]-es[1])/(length(es)-1)))")
-          end
-          try
-              fn=find_symbol(utilpath,"FZSQcl")
-              util=dlopen(utilpath)
-              p=dlsym(util,fn)
-              vals=map([.08,.2,.3,1.]) do z
-                  sqrt(ccall(p,Cdouble,(Ptr{Cvoid},Cdouble,Cdouble,Cdouble),C_NULL,z,0.,Float64(Float32(.73))))
-              end
-              report("distance",join(vals,","))
-          catch err
-              report("distance",repr(err))
-          end
-          JULIA
-          linefile=$(find "$RUNNER_TEMP" -name 'apec_v3.1.3_line.fits' -print -quit)
-          trap 'echo "error=$(grep -E "ERROR:|LoadError|signal" "$RUNNER_TEMP/grid.log" | head -2 | tr "\n" " " | cut -c1-210)" >> "$GITHUB_OUTPUT"' ERR
-          julia --project="$RUNNER_TEMP/refenv" "$RUNNER_TEMP/grid.jl" "${linefile%_line.fits}" 2>&1 | tee "$RUNNER_TEMP/grid.log"
+          lib=$(julia --project="$RUNNER_TEMP/refenv" -e 'using LibXSPEC_jll; print(LibXSPEC_jll.libXSFunctions)')
+          table=$(find "$(dirname "$lib")/.." -iname raysmith.mod -print -quit)
+          if [[ -z "$table" ]]; then
+              table="$RUNNER_TEMP/raysmith.mod"
+              curl -fsSL --retry 1 --max-time 35 -o "$table" https://heasarc.gsfc.nasa.gov/FTP/software/xspec/spectral/modelData/raysmith.mod || true
+          fi
+          python - "$lib" "$table" <<'PY'
+          import os, subprocess, re, struct, sys
+          from pathlib import Path
+          def output(k,v):
+              with open(os.environ["GITHUB_OUTPUT"],"a") as out:
+                  print(f"{k}={v}",file=out)
+              print(k,v)
+          lib,tab=map(Path,sys.argv[1:])
+          entry=next(v for v in subprocess.check_output(["nm","-S","--defined-only",lib],text=True).splitlines() if v.split()[-1].startswith("_Z15calcCoolingFlow") and v.split()[2]=="T")
+          start=int(entry.split()[0],16)
+          dis=subprocess.check_output(["objdump","--insn-width=12","-Cd",f"--start-address={start+0x1350}",f"--stop-address={start+0x15a0}",lib],text=True)
+          raw=lib.read_bytes()
+          sec=subprocess.check_output(["objdump","-h",lib],text=True)
+          offsets=[tuple(int(x,16) for x in m) for m in re.findall(r'^\s*\d+\s+\.\w+\s+([0-9a-f]+)\s+([0-9a-f]+)\s+[0-9a-f]+\s+([0-9a-f]+)',sec,re.M)]
+          constants=[]
+          for line in dis.splitlines():
+              m=re.search(r'\b(?:movsd|divsd|mulsd)\s+.*\(%rip\).*#\s*([0-9a-f]+)',line)
+              if m:
+                  a=int(m[1],16)
+                  for size,vm,fi in offsets:
+                      if vm<=a<vm+size:
+                          val=struct.unpack_from("<d",raw,fi+a-vm)[0]
+                          constants.append(f"{line.split(':')[0].strip()}:{val:g}")
+                          break
+          output("slope",",".join(constants))
+          print(dis)
+          if not tab.is_file():
+              output("error","raysmith.mod not found")
+              sys.exit(0)
+          output("file",str(tab.stat().st_size))
+          with tab.open("rb") as f:
+              for index,key in enumerate(("primary","params","energies","spectra")):
+                  header={}
+                  while True:
+                      block=f.read(2880).decode("ascii","replace")
+                      stop=False
+                      for i in range(0,len(block),80):
+                          card=block[i:i+80]; name=card[:8].strip()
+                          if name=="END":
+                              stop=True;break
+                          if card[8:10]=="= ":
+                              header[name]=card[10:].split(" /",1)[0].strip().strip("'").strip()
+                      if stop or len(block)<2880:break
+                  if index==0:
+                      continue
+                  n=int(header["NAXIS1"])*int(header["NAXIS2"])+int(header.get("PCOUNT",0))
+                  data=f.read(n)
+                  f.seek((-n)%2880,1)
+                  output(key," ".join(k+":"+header[k] for k in header if k in ("EXTNAME","NAXIS2","NADDPARM","NINTPARM","TFIELDS") or k.startswith("TTYPE")))
+                  if key=="params":
+                      row=data[:int(header["NAXIS1"])]
+                      fields=[]
+                      fmt={"A":"s","J":"i","E":"f","D":"d","I":"h"}
+                      cursor=0
+                      for field in range(1,int(header["TFIELDS"])+1):
+                          match=re.fullmatch(r"(\d*)([AJEDI])",header["TFORM"+str(field)])
+                          if not match: break
+                          count=int(match[1] or 1); code=fmt[match[2]]; fmtstr=">"+str(count)+code
+                          vals=struct.unpack_from(fmtstr,row,cursor)
+                          cursor+=struct.calcsize(fmtstr)
+                          name=header["TTYPE"+str(field)]
+                          if name in ("NAME","METHOD","NUMBVALS","VALUE"):
+                              fields.append(f"{name}={vals[:4]}")
+                      output("sample"," ".join(fields))
+          PY
   report:
     if: always()
-    needs: reference
+    needs: inspect
     runs-on: ubuntu-latest
     steps:
-      - name: "Grid ${{ needs.reference.outputs.grid }}"
+      - name: "file ${{ needs.inspect.outputs.file }}"
         run: 'true'
-      - name: "Detail ${{ needs.reference.outputs.detail }}"
+      - name: "params ${{ needs.inspect.outputs.params }}"
         run: 'true'
-      - name: "Cosmology ${{ needs.reference.outputs.distance }}"
+      - name: "energies ${{ needs.inspect.outputs.energies }}"
         run: 'true'
-      - name: "Error ${{ needs.reference.outputs.error }}"
+      - name: "spectra ${{ needs.inspect.outputs.spectra }}"
+        run: 'true'
+      - name: "sample ${{ needs.inspect.outputs.sample }}"
+        run: 'true'
+      - name: "slope ${{ needs.inspect.outputs.slope }}"
+        run: 'true'
+      - name: "error ${{ needs.inspect.outputs.error }}"
         run: 'true'

@@ -47,6 +47,17 @@ include("fixtures.jl")
     end
 end
 
+@testset "Variable-length AtomDB continuum rows" begin
+    mktempdir() do dir
+        fixed = AtomDB(write_test_apec(joinpath(dir, "fixed")))
+        variable = AtomDB(write_test_apec(joinpath(dir, "variable"); variable_continuum = true))
+        edges = [1.0, 4.0, 8.0, 13.0]
+        for kT in (1.0, 2.0, 3.0), abundance in (0.0, 1.0)
+            @test isapprox(apec(edges, variable; kT, abundance), apec(edges, fixed; kT, abundance))
+        end
+    end
+end
+
 @testset "Continuum sampled at bin midpoints" begin
     # The first midpoint equals the first node. The second bin straddles an
     # internal node, where midpoint sampling differs from an exact integral.

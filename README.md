@@ -1,9 +1,27 @@
 # Plasma.jl
 
-Plasma.jl evaluates the XSPEC APEC, Wdem, Cempow, and cooling-flow families in
-Julia using AtomDB's precomputed CIE emissivities. Supply the matching
+Plasma.jl evaluates single-temperature APEC, multi-temperature emission-measure
+distributions, and cooling-flow models in Julia using AtomDB's precomputed
+collisional ionization equilibrium (CIE) emissivities. Supply the matching
 `*_line.fits` and `*_coco.fits` files from AtomDB or an XSPEC installation.
 The loader accepts fixed-width and variable-length continuum columns.
+
+## Available models
+
+| Base model | What it describes | Temperature parameters | Normalization (`K` or `norm`) |
+| --- | --- | --- | --- |
+| [`Apec`](#apec-variants-and-abundance-tables) | Plasma at one temperature | `kT` | XSPEC APEC emission-measure normalization |
+| [`Wdem`](#multi-temperature-models) | Power-law differential emission measure with a low-temperature cutoff | `Tmax`, `beta`, `inv_slope` | APEC scale applied to weights that sum to one |
+| [`Cempow`](#multi-temperature-models) | Power-law emission measure sampled at logarithmic temperature intervals | `alpha`, `Tmax` | APEC scale applied to the absolute weights |
+| [`Coolflow`](#cooling-flow-models) | Isobaric cooling over a temperature range | `lowT`, `highT` | Solar masses per year |
+| [`Cph`](#cooling-flow-models) | Cooling and heating in a multi-temperature plasma | `peakT` | Solar masses per year |
+| [`LocalCoolflow`](#cooling-flow-models) | Isobaric cooling with a signed spectral shift for a nearby source | `lowT`, `highT` | 10⁻¹⁴ solar masses per year per square parsec |
+| [`LocalCph`](#cooling-flow-models) | Cooling and heating with a signed spectral shift for a nearby source | `peakT` | 10⁻¹⁴ solar masses per year per square parsec |
+
+Temperatures are in keV. The lowercase functions evaluate spectra directly
+and take `norm`. The uppercase constructors create additive models for
+SpectralFitting.jl and take `K`. The family tables below list the available
+abundance and line-broadening variants.
 
 ## Evaluate a spectrum
 
@@ -18,10 +36,8 @@ flux = apec(edges, db; kT = 0.8, abundance = 0.5, redshift = 0.01, norm = 1e-3)
 
 `flux` contains photons cm⁻² s⁻¹ integrated over each bin. `apec!` accepts a
 preallocated output vector. Reuse `db` across calls to cache loaded temperature
-slices. The default reference table is `angr`. In plain APEC, the abundance parameter
-scales C, N, O, Ne, Mg, Al, Si, S, Ar, Ca, Fe, and Ni. H, He, and the trace
-elements keep their reference-table values by default. Temperatures outside the tabulated range use
-the nearest tabulated spectrum.
+slices. Temperatures outside the tabulated range use the nearest tabulated
+spectrum.
 
 ## Fit with SpectralFitting.jl
 
@@ -32,12 +48,10 @@ model = Apec(db; kT = 0.8, K = 1e-3, abundance = FitParam(0.5), redshift = 0.01)
 flux = invokemodel(edges, model)
 ```
 
-The model works as an additive component. `K` is the XSPEC normalization. Use
-`Apec(db)` for the plain XSPEC-style parameter defaults, with abundance and
-redshift frozen. Use `FitParam` for custom bounds or to thaw a parameter.
-The adapter supports SpectralFitting 0.7.3 and 0.7.4. Loading
-and evaluating `apec` requires FITSIO.jl. The calculation has no XSPEC runtime
-dependency.
+For `Apec(db)`, abundance and redshift start frozen. Use `FitParam` for custom
+bounds or to thaw a parameter. The adapter supports SpectralFitting 0.7.3 and
+0.7.4. The models use FITSIO.jl to read the tables and run without an XSPEC
+runtime dependency.
 
 ## APEC variants and abundance tables
 
@@ -50,6 +64,10 @@ dependency.
 | `bvapec` | `bvapec` | `Bvapec` | He plus 12 metals |
 | `bvvapec` | `bvvapec` | `Bvvapec` | All 30 elements, H through Zn |
 
+In plain APEC, `abundance` scales C, N, O, Ne, Mg, Al, Si, S, Ar, Ca, Fe,
+and Ni. H, He, and the trace elements keep their reference-table values by
+default.
+
 The `b` models broaden resolved lines by default. `velocity` is the additional
 Gaussian sigma in km/s. It adds in quadrature to the thermal width computed
 from each temperature slice and element mass. Use `thermal_broadening=false`
@@ -57,13 +75,14 @@ for velocity-only broadening. The continuum and pseudo-continuum retain their
 standard interpolation. The Julia implementation integrates the Gaussian over
 each bin and includes wings down to eight sigma.
 
-Use `abundance_table=:wilm` to set the reference per evaluation or model.
+The default abundance table is `angr`. Use `abundance_table=:wilm` to set the
+reference per evaluation or model.
 The built-in XSPEC tables are `angr`, `aspl`, `feld`, `aneb`, `grsa`, `wilm`,
 `lodd`, `lpgp`, `lpgs`, and `felc`. `solar_abundances(:wilm).Fe` returns the Fe/H
 number ratio. For a custom table, pass a path with 30 whitespace-separated
 ratios in atomic-number order. Model abundance parameters are multipliers of
-the selected table. For the `apec` and `vapec` families, set `trace_abundance`
-to a multiplier or tie it to an element such as `:Fe`.
+the selected table. In variants with tied or selected-element abundances, set
+`trace_abundance` to a multiplier or tie it to an element such as `:Fe`.
 
 ```julia
 model = Bvapec(db; kT = 0.8, K = 1e-3, Fe = FitParam(0.5),
@@ -84,14 +103,16 @@ The direct `vvapec` and `bvvapec` functions accept `K` for potassium and
 | Wdem | `Wdem`, `Vwdem`, `Vvwdem`, `Bwdem`, `Bvwdem`, `Bvvwdem` | `wdem`, `vwdem`, `vvwdem`, `bwdem`, `bvwdem`, `bvvwdem` |
 | Cempow | `Cempow`, `Vcempow`, `Bcempow`, `Bvcempow` | `cempow`, `vcempow`, `bcempow`, `bvcempow` |
 
-`Wdem` takes `Tmax` in keV, `beta = Tmin/Tmax`, and `inv_slope`. The XSPEC
+`Wdem` takes `Tmax`, `beta = Tmin/Tmax`, and `inv_slope`, which default to
+1.0 keV, 0.1, and 0.25, respectively. The XSPEC
 sampling integrates `T^(1/inv_slope)` in 51 intervals of width
 `(Tmax - Tmin)/50`, including the final interval above `Tmax`. Its weights sum
 to 1. When `beta=1`, Plasma uses the single-temperature limit at `Tmax`.
 
-`Cempow` takes `alpha` and `Tmax`. It steps down from `Tmax` by 0.1 dex to
-0.02725 keV and retains the absolute `0.1*(T/Tmax)^alpha` weights. Their sum
-varies with `alpha`.
+`Cempow` takes the power-law exponent `alpha` and `Tmax`, which default to
+1.0 and 1.0 keV. It steps down from `Tmax` by 0.1 dex and keeps samples
+at or above 0.02725 keV. It retains the absolute `0.1*(T/Tmax)^alpha`
+weights, whose sum varies with `alpha`.
 
 The standalone `norm` and SpectralFitting `K` scale the resulting spectrum.
 The `V` models fit He and 13 metals, including Na. The `Vv` models fit H
@@ -119,12 +140,13 @@ other_flux = cempow(edges, db; Tmax=1.5, alpha=0.8, norm=1e-3)
 | Local cooling flow | `LocalCoolflow`, `LocalVcoolflow`, `LocalBcoolflow`, `LocalBvcoolflow` | `localcoolflow`, `localvcoolflow`, `localbcoolflow`, `localbvcoolflow` |
 | Local cooling plus heating | `LocalCph`, `LocalVcph`, `LocalBcph`, `LocalBvcph` | `localcph`, `localvcph`, `localbcph`, `localbvcph` |
 
-Both families use the AtomDB CIE backend (`switch=2`). The isobaric models
-integrate over `lowT` to `highT` in keV, weighting the emission measure by
-the inverse bolometric emissivity. The cooling-plus-heating models take
-`peakT` in keV and integrate from 0.01 to 50 keV. The temperature integral
-uses 10 logarithmic samples by default. Set `ntemps` to change the sample
-count, analogous to the XSPEC setting `CFLOW_NTEMPS`.
+The cooling-flow models use the AtomDB CIE backend (`switch=2`).
+`Mkcflow` and `Vmcflow` are aliases for `Coolflow` and `Vcoolflow`.
+The isobaric models integrate from `lowT` to `highT` (default 0.1 to 4.0 keV),
+weighting the emission measure by the inverse bolometric emissivity. The
+cooling-plus-heating models take `peakT` (default 2.2 keV) and integrate from
+0.01 to 50 keV. The temperature integral uses 10 logarithmic samples by default.
+Set `ntemps` to change the sample count, analogous to XSPEC's `CFLOW_NTEMPS`.
 
 The cooling-plus-heating models follow the effective XSPEC 12.15 heating
 prescription. At `peakT ≥ 1` keV the heating term uses a 1 keV emissivity
@@ -136,10 +158,12 @@ from 0.0105 to 1,000 keV and bin-midpoint weighting. Use
 original energies of resolved lines. The choice can have a large effect on
 `cph` where heating and cooling nearly cancel.
 
-For the cosmological families, the standalone `norm` and SpectralFitting `K`
-are mass accretion rates in solar masses per year. The default `CoolingCosmology()` uses
-`H0=70.0`, `q0=0.0`, and `lambda0=0.73` to determine distance from
-`redshift`. Set `distance_mpc` to supply an independently measured distance.
+### Cosmological and local normalization
+
+For the cosmological families, `K` and `norm` are mass accretion rates in
+solar masses per year. The default `CoolingCosmology()` uses `H0=70.0`,
+`q0=0.0`, and `lambda0=0.73` to determine distance from `redshift`, which
+defaults to 0.1. Set `distance_mpc` to supply an independently measured distance.
 By default, `redshift` also supplies the normalization's photon arrival-rate
 factor. Set `normalization_redshift` to fix both redshift-dependent parts of
 the normalization while varying the spectral shift with `redshift`.

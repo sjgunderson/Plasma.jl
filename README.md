@@ -1,7 +1,7 @@
 # Plasma.jl
 
-Plasma.jl evaluates the XSPEC APEC, Wdem, and Cempow families in Julia using
-AtomDB's precomputed CIE emissivities. Supply the matching
+Plasma.jl evaluates the XSPEC APEC, Wdem, Cempow, and cooling-flow families in
+Julia using AtomDB's precomputed CIE emissivities. Supply the matching
 `*_line.fits` and `*_coco.fits` files from AtomDB or an XSPEC installation.
 The loader accepts fixed-width and variable-length continuum columns.
 
@@ -107,6 +107,45 @@ source = Bvwdem(db; Tmax=1.5, beta=FitParam(0.15), inv_slope=0.25,
 flux = invokemodel(edges, source)
 
 other_flux = cempow(edges, db; Tmax=1.5, alpha=0.8, norm=1e-3)
+```
+
+## Cooling-flow models
+
+| Family | SpectralFitting constructors | Standalone evaluators |
+| --- | --- | --- |
+| Isobaric cooling flow | `Coolflow`, `Vcoolflow`, `Bcoolflow`, `Bvcoolflow` | `coolflow`, `vcoolflow`, `bcoolflow`, `bvcoolflow` |
+| Legacy aliases | `Mkcflow`, `Vmcflow` | `mkcflow`, `vmcflow` |
+| Cooling plus heating | `Cph`, `Vcph`, `Bcph`, `Bvcph` | `cph`, `vcph`, `bcph`, `bvcph` |
+
+Both families use the AtomDB CIE backend (`switch=2`). The isobaric models
+integrate over `lowT` to `highT` in keV, weighting the emission measure by
+the inverse bolometric emissivity. The cooling-plus-heating models take
+`peakT` in keV and integrate from 0.01 to 50 keV. The temperature integral
+uses 10 logarithmic samples by default. Set `ntemps` to change the sample
+count, analogous to the XSPEC setting `CFLOW_NTEMPS`.
+
+The cooling-plus-heating models follow the effective XSPEC 12.15 heating
+prescription. At `peakT ≥ 1` keV the heating term uses a 1 keV emissivity
+reference and scales as `(T/peakT)^2.5`. For `peakT < 1` keV the model uses
+cooling alone. Plasma integrates the tabulated continuum and resolved lines
+directly for the bolometric emissivity. XSPEC estimates it on an energy grid.
+The difference can be amplified when cooling and heating nearly cancel.
+
+The standalone `norm` and the SpectralFitting `K` are mass accretion rates
+in solar masses per year. The default `CoolingCosmology()` uses
+`H0=70.0`, `q0=0.0`, and `lambda0=0.73` to determine distance from
+`redshift`. For a local source, or to supply an independently measured
+luminosity distance, set `distance_mpc`. Redshift still shifts the spectrum.
+The `V` and `B` variants follow the abundance and broadening conventions
+of `Cempow`.
+
+```julia
+model = Bvcoolflow(db; lowT = 0.3, highT = 4.0, redshift = 0.08,
+    K = 25.0, Fe = FitParam(0.5), velocity = 200.0)
+flux = invokemodel(edges, model)
+
+local_flux = coolflow(edges, db; lowT = 0.2, highT = 1.2,
+    redshift = 0.0, distance_mpc = 0.002, norm = 1e-9)
 ```
 
 ## Validation

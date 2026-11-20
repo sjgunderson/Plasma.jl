@@ -116,5 +116,6 @@ function SpectralFitting.invoke!(output, edges, model::AbstractApecModel)
 end
 
 include("dem.jl")
+include("cooling.jl")
 
 end

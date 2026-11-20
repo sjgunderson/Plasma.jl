@@ -10,12 +10,17 @@ export Wdem, Vwdem, Vvwdem, Bwdem, Bvwdem, Bvvwdem
 export Cempow, Vcempow, Bcempow, Bvcempow
 export wdem, vwdem, vvwdem, bwdem, bvwdem, bvvwdem
 export cempow, vcempow, bcempow, bvcempow
+export Coolflow, Vcoolflow, Bcoolflow, Bvcoolflow, Mkcflow, Vmcflow
+export Cph, Vcph, Bcph, Bvcph, CoolingCosmology
+export coolflow, vcoolflow, bcoolflow, bvcoolflow, mkcflow, vmcflow
+export cph, vcph, bcph, bvcph
 
 include("abundances.jl")
 include("atomdb.jl")
 include("broadening.jl")
 include("apec.jl")
 include("dem.jl")
+include("cooling.jl")
 
 """
     Apec(db::AtomDB; K, kT, abundance, redshift)
@@ -44,8 +49,11 @@ function Bvapec end
 function Bvvapec end
 
 # The SpectralFitting extension provides the constructors for these model types.
-for (_, constructor, _, _, _) in (WDEM_VARIANTS..., CEMPOW_VARIANTS...)
+for (_, constructor, _, _, _) in (WDEM_VARIANTS..., CEMPOW_VARIANTS..., COOLFLOW_VARIANTS..., CPH_VARIANTS...)
     @eval function $constructor end
 end
+
+const Mkcflow = Coolflow
+const Vmcflow = Vcoolflow
 
 end

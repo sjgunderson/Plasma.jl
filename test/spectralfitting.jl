@@ -81,3 +81,35 @@ end
         end)
     end
 end
+
+@testset "SpectralFitting cooling-flow families" begin
+    mktempdir() do dir
+        db = AtomDB(write_test_apec(joinpath(dir, "cooling")))
+        edges = collect(range(1.0, 13.0; length = 201))
+        distance_mpc, redshift, K = 11.0, 0.02, 0.4
+        for (constructor, evaluator, names, kwargs) in (
+                (Coolflow, coolflow, (:lowT, :highT), (; abundance = 0.6)),
+                (Vcoolflow, vcoolflow, (:lowT, :highT), (; Fe = 0.4, Na = 0.3)),
+                (Bcoolflow, bcoolflow, (:lowT, :highT), (; velocity = 200.0)),
+                (Bvcoolflow, bvcoolflow, (:lowT, :highT), (; velocity = 200.0, Na = 0.3)),
+                (Cph, cph, (:peakT,), (; peakT = 1.5)),
+                (Vcph, vcph, (:peakT,), (; Fe = 0.4, Na = 0.3)),
+                (Bcph, bcph, (:peakT,), (; velocity = 200.0)),
+                (Bvcph, bvcph, (:peakT,), (; velocity = 200.0, Na = 0.3)))
+            model = constructor(db; K, distance_mpc, redshift, abundance_table = :wilm, kwargs...)
+            expected = evaluator(edges, db; norm = K, distance_mpc, redshift, abundance_table = :wilm, kwargs...)
+            @test SpectralFitting.parameter_names(model)[1:(1 + length(names))] == (:K, names...)
+            copied = copy(model)
+            @test copied.db === model.db && copied.K !== model.K
+            @test isapprox(invokemodel(edges, model), expected)
+            @test isapprox(invokemodel(edges, model + model), 2 .* expected)
+        end
+        @test Mkcflow === Coolflow && Vmcflow === Vcoolflow
+        @test isfinite(SpectralFitting.ForwardDiff.derivative(0.08) do z
+            sum(coolflow(edges, db; redshift = z))
+        end)
+        @test isfinite(SpectralFitting.ForwardDiff.derivative(0.7) do lowT
+            sum(vcoolflow(edges, db; lowT))
+        end)
+    end
+end

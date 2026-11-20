@@ -108,7 +108,7 @@ end
         fixed = Coolflow(db; K, redshift, distance_mpc, normalization_redshift = 0.0, bolometric = :direct)
         rest = Coolflow(db; K, redshift = 0.0, distance_mpc, bolometric = :direct)
         @test invokemodel(edges ./ (1 + redshift), fixed) ≈ invokemodel(edges, rest)
-        local_K = K / (1e6 * distance_mpc)^2
+        local_K = K / (1e-14 * (1e6 * distance_mpc)^2)
         @test invokemodel(edges, LocalCoolflow(db; K = local_K, bolometric = :direct)) ≈ invokemodel(edges, rest)
         for (constructor, evaluator, kwargs) in (
                 (LocalCoolflow, localcoolflow, (;)),

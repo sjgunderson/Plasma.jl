@@ -64,7 +64,8 @@ end
     LocalCoolflow(db::AtomDB; redshift=0.0, K=1.0, ...)
 
 Fit-ready cooling flow with `K` equal to the mass accretion rate divided by
-the squared source distance, in solar masses per year per square parsec.
+the squared source distance, in units of 10⁻¹⁴ solar masses per year per
+square parsec.
 The signed spectral `redshift` can be fitted independently.
 """ LocalCoolflow
 

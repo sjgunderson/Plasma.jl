@@ -148,11 +148,11 @@ The `V` and `B` variants follow the abundance and broadening conventions of
 `Cempow`.
 
 For the local families, `K` and `norm` are the mass accretion rate divided by
-the square of the source distance, in solar masses per year per square parsec.
-Use `K = mdot / distance_pc^2` when converting a physical accretion rate
-`mdot` in solar masses per year. The model includes the geometric factor of
-`1/(4π)`. The signed `redshift` defaults to zero and only shifts the
-spectrum. A negative value blueshifts the lines.
+the square of the source distance, in units of 10⁻¹⁴ solar masses per year per
+square parsec. Use `K = (mdot / distance_pc^2) / 1e-14` when converting a
+physical accretion rate `mdot` in solar masses per year. The model includes
+the geometric factor of `1/(4π)`. The signed `redshift` defaults to zero and
+only shifts the spectrum. A negative value blueshifts the lines.
 
 ```julia
 model = Bvcoolflow(db; lowT = 0.3, highT = 4.0, redshift = 0.08,
@@ -161,7 +161,7 @@ flux = invokemodel(edges, model)
 
 local_model = LocalCoolflow(db; lowT = 0.2, highT = 1.2,
     redshift = FitParam(-0.0002; lower_limit = -0.01, upper_limit = 0.01),
-    K = 2.5e-16)  # 1e-9 solar masses per year at 2,000 pc
+    K = 0.025)  # 1e-9 solar masses per year at 2,000 pc
 local_flux = invokemodel(edges, local_model)
 ```
 

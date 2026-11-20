@@ -58,7 +58,7 @@
 
         blueshift = -0.125
         blue_edges = edges ./ (1 + blueshift)
-        local_norm = 1.0 / (1e6 * distance_mpc)^2
+        local_norm = 1.0 / (1e-14 * (1e6 * distance_mpc)^2)
         local_args = (; lowT = t1, highT = t2, norm = local_norm, ntemps = 2)
         @test localcoolflow(edges, db; local_args...) ≈ plain
         @test localcoolflow(blue_edges, db; local_args..., redshift = blueshift) ≈ plain

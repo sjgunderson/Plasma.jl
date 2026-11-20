@@ -26,6 +26,7 @@ const COOLING_NTEMPS = 10
 const CPH_LIMITS = (0.01, 50.0)
 const MPC_CM = 3.0856775814913673e24
 const PC_CM = MPC_CM / 1e6
+const LOCAL_COOLING_NORM_UNIT = 1e-14 # solar masses per year per square parsec
 const FLOW_PARTICLES_PER_SECOND = (5 / 2) * (1.98847e33 / 31_557_600) / (0.6 * 1.66053906660e-24)
 
 # XSPEC 12.15's AtomDB grid from plasmaFileInfo, in keV.
@@ -137,9 +138,9 @@ function cooling_normalization(z_norm, settings::CoolingOptions)
     return 1e-14 * FLOW_PARTICLES_PER_SECOND / (4π * distance_cm^2)
 end
 
-# Local K or norm already contains the inverse-square distance in pc⁻².
+# Convert the scaled local K or norm to a mass accretion rate per square parsec.
 cooling_normalization(_z_norm, ::LocalCoolingOptions) =
-    1e-14 * FLOW_PARTICLES_PER_SECOND / (4π * PC_CM^2)
+    1e-14 * LOCAL_COOLING_NORM_UNIT * FLOW_PARTICLES_PER_SECOND / (4π * PC_CM^2)
 
 function continuum_luminosity(continuum)
     energy, density = continuum.energies, continuum.density
@@ -328,7 +329,8 @@ end
     localcoolflow(edges, db::AtomDB; redshift=0.0, norm=1.0, ...)
 
 Evaluate cooling flow with `norm` equal to the mass accretion rate divided by
-the squared source distance, in solar masses per year per square parsec.
+the squared source distance, in units of 10⁻¹⁴ solar masses per year per
+square parsec.
 The signed spectral redshift is independent of the normalization.
 """ localcoolflow
 

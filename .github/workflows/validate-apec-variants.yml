@@ -1,36 +1,41 @@
-name: Validate APEC on AtomDB 3.1.3
+name: Validate SpectralFitting APEC variants
 on: [push]
 permissions:
   contents: read
+env:
+  JULIA_PKG_PRECOMPILE_AUTO: '0'
 jobs:
   validate:
     runs-on: ubuntu-latest
-    timeout-minutes: 8
+    timeout-minutes: 15
+    outputs:
+      setup: ${{ steps.setup.outputs.diagnostic }}
+      test: ${{ steps.integration.outputs.diagnostic }}
     steps:
       - uses: actions/checkout@v4
       - uses: julia-actions/setup-julia@v2
         with:
           version: '1.10'
-      - run: julia --project -e 'using Pkg; Pkg.instantiate()'
-      - name: Download public AtomDB 3.1.3 CIE tables
+      - name: Set up SpectralFitting 0.7.4 and FITSIO
+        id: setup
         run: |
-          mkdir -p "$RUNNER_TEMP/atomdb"
-          cd "$RUNNER_TEMP/atomdb"
-          curl --fail --location --retry 1 --connect-timeout 15 --max-time 120 -o release.tar.bz2 https://hea-www.cfa.harvard.edu/AtomDB/releases/atomdb_v3.1.3.tar.bz2
-          tar -xjf release.tar.bz2 --wildcards '*/apec_v3.1.3_line.fits' '*/apec_v3.1.3_coco.fits'
-      - name: Evaluate all six variants on real CIE emissivities
+          trap 'echo "diagnostic=$(grep -E "ERROR:|LoadError|Unsatisfiable" "$RUNNER_TEMP/setup.log" | tail -1 | cut -c1-180)" >> "$GITHUB_OUTPUT"' ERR
+          julia --color=no --project="$RUNNER_TEMP/integration" -e '
+            using Pkg
+            Pkg.Registry.add("General")
+            Pkg.Registry.add(Pkg.RegistrySpec(url="https://github.com/astro-group-bristol/AstroRegistry"))
+            Pkg.develop(path=pwd())
+            Pkg.add([Pkg.PackageSpec(name="SpectralFitting", version="0.7.4"), Pkg.PackageSpec(name="FITSIO")])
+          ' 2>&1 | tee "$RUNNER_TEMP/setup.log"
+      - name: Evaluate the six SpectralFitting models
+        id: integration
         run: |
-          linefile=$(find "$RUNNER_TEMP/atomdb" -name apec_v3.1.3_line.fits -print -quit)
-          test -f "$linefile"
-          julia --project -e '
-            using Plasma, Test
-            db = AtomDB(ARGS[1])
-            edges = range(0.35, 8.0; length=4001)
-            for evaluator in (apec, bapec, vapec, vvapec, bvapec, bvvapec)
-                flux = evaluator(edges, db; kT=0.8, abundance_table=:wilm, norm=1e-3)
-                @test length(flux) == length(edges)-1
-                @test all(x -> isfinite(x) && x >= 0.0, flux)
-                @test sum(flux) > 0.0
-            end
-            @test bapec(edges, db; kT=0.8, velocity=250.0) != apec(edges, db; kT=0.8)
-          ' "${linefile%_line.fits}"
+          trap 'echo "diagnostic=$(grep -E "ERROR:|LoadError|MethodError|UndefVarError|Test Failed" "$RUNNER_TEMP/integration.log" | head -2 | tr "\n" " " | cut -c1-180)" >> "$GITHUB_OUTPUT"' ERR
+          julia --color=no --compiled-modules=no --project="$RUNNER_TEMP/integration" test/spectralfitting.jl 2>&1 | tee "$RUNNER_TEMP/integration.log"
+  result:
+    if: always()
+    needs: validate
+    name: "Integration result ${{ needs.validate.outputs.test || needs.validate.outputs.setup || needs.validate.result }}"
+    runs-on: ubuntu-latest
+    steps:
+      - run: 'true'

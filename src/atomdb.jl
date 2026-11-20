@@ -87,6 +87,11 @@ function read_lines(path, index)
     end
 end
 
+# FITSIO returns a vector of row vectors for variable-length columns, and
+# a numeric array for fixed-width columns (including scalar-width columns).
+continuum_rows(column::AbstractVector{<:AbstractVector}, _nrows) = column
+continuum_rows(column::AbstractArray{<:Real}, nrows) = eachcol(reshape(column, :, nrows))
+
 function read_continua(path, index)
     return FITS(path, "r") do fits
         hdu = fits["EMISSIVITY", index]
@@ -100,17 +105,18 @@ function read_continua(path, index)
         for (count_column, energy_column, density_column) in (
                 ("N_Cont", "E_Cont", "Continuum"), ("N_Pseudo", "E_Pseudo", "Pseudo"))
             counts = read(hdu, count_column; case_sensitive = false)
-            energies = reshape(read(hdu, energy_column; case_sensitive = false), :, length(elements))
-            densities = reshape(read(hdu, density_column; case_sensitive = false), :, length(elements))
+            energies = continuum_rows(read(hdu, energy_column; case_sensitive = false), length(elements))
+            densities = continuum_rows(read(hdu, density_column; case_sensitive = false), length(elements))
             for i in eachindex(elements)
                 n = counts[i]
-                if !(0 <= n <= size(energies, 1) && n <= size(densities, 1))
-                    throw(ArgumentError("Invalid $count_column at temperature index $index in $path"))
+                energy_row, density_row = energies[i], densities[i]
+                if !(0 <= n <= length(energy_row) && n <= length(density_row))
+                    throw(ArgumentError("Invalid $count_column for Z=$(elements[i]) at temperature index $index in $path: " *
+                        "declared $n points, found $(length(energy_row)) energies and $(length(density_row)) emissivities"))
                 end
                 iszero(n) && continue
-                # The FITS vectors are padded to the longest row in this extension.
-                e = Vector{Float32}(view(energies, 1:n, i))
-                f = Vector{Float32}(view(densities, 1:n, i))
+                e = Vector{Float32}(view(energy_row, 1:n))
+                f = Vector{Float32}(view(density_row, 1:n))
                 if !all(x -> isfinite(x) && x > 0, e) ||
                         !all(j -> e[j] > e[j - 1], 2:length(e)) ||
                         !all(x -> isfinite(x) && x >= 0, f)

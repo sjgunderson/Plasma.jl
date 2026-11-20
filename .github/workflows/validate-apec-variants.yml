@@ -1,0 +1,44 @@
+name: Validate SpectralFitting APEC variants
+on: [push]
+permissions:
+  contents: read
+defaults:
+  run:
+    shell: bash
+env:
+  JULIA_PKG_PRECOMPILE_AUTO: '0'
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    outputs:
+      setup: ${{ steps.setup.outputs.diagnostic }}
+      test: ${{ steps.integration.outputs.diagnostic }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: julia-actions/setup-julia@v2
+        with:
+          version: '1.10'
+      - name: Set up SpectralFitting 0.7.4 and FITSIO
+        id: setup
+        run: |
+          trap 'echo "diagnostic=$(grep -E "ERROR:|LoadError|Unsatisfiable" "$RUNNER_TEMP/setup.log" | tail -1 | cut -c1-180)" >> "$GITHUB_OUTPUT"' ERR
+          julia --color=no --project="$RUNNER_TEMP/integration" -e '
+            using Pkg
+            Pkg.Registry.add("General")
+            Pkg.Registry.add(Pkg.RegistrySpec(url="https://github.com/astro-group-bristol/AstroRegistry"))
+            Pkg.develop(path=pwd())
+            Pkg.add([Pkg.PackageSpec(name="SpectralFitting", version="0.7.4"), Pkg.PackageSpec(name="FITSIO")])
+          ' 2>&1 | tee "$RUNNER_TEMP/setup.log"
+      - name: Evaluate the six SpectralFitting models
+        id: integration
+        run: |
+          trap 'echo "diagnostic=$(grep -E "ERROR:|LoadError|MethodError|UndefVarError|Test Failed" "$RUNNER_TEMP/integration.log" | head -2 | tr "\n" " " | cut -c1-180)" >> "$GITHUB_OUTPUT"' ERR
+          julia --color=no --optimize=0 --compiled-modules=no --project="$RUNNER_TEMP/integration" test/spectralfitting.jl 2>&1 | tee "$RUNNER_TEMP/integration.log"
+  result:
+    if: always()
+    needs: validate
+    name: "Integration result ${{ needs.validate.outputs.test || needs.validate.outputs.setup || needs.validate.result }}"
+    runs-on: ubuntu-latest
+    steps:
+      - run: 'true'

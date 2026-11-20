@@ -1,6 +1,5 @@
 # XSPEC's wavelength-to-energy conversion in keV Å.
 const KEV_ANGSTROM = 12.39841974
-const APEC_METALS = (6, 7, 8, 10, 12, 13, 14, 16, 18, 20, 26, 28)
 
 struct Continuum
     energies::Vector{Float32}
@@ -10,13 +9,12 @@ end
 struct Lines
     energies::Vector{Float64}
     emissivities::Vector{Float32}
+    elements::Vector{UInt8}
 end
 
 struct TemperatureSlice
-    fixed_continua::Vector{Continuum}
-    metal_continua::Vector{Continuum}
-    fixed_lines::Lines
-    metal_lines::Lines
+    continua::Vector{Tuple{Int,Continuum}}
+    lines::Lines
 end
 
 """
@@ -77,13 +75,7 @@ function read_lines(path, index)
 
         energies = KEV_ANGSTROM ./ wavelength
         order = sortperm(energies)
-        fixed, metals = Lines(Float64[], Float32[]), Lines(Float64[], Float32[])
-        for i in order
-            lines = elements[i] in APEC_METALS ? metals : fixed
-            push!(lines.energies, energies[i])
-            push!(lines.emissivities, emissivities[i])
-        end
-        return fixed, metals
+        return Lines(energies[order], Float32.(emissivities[order]), UInt8.(elements[order]))
     end
 end
 
@@ -100,8 +92,8 @@ function read_continua(path, index)
         if !all(iszero, ions) || !all(z -> 1 <= z <= 30, elements) || !allunique(elements)
             throw(ArgumentError("Expected one CIE continuum row per element at temperature index $index in $path"))
         end
-        fixed, metals = Continuum[], Continuum[]
-        isempty(elements) && return fixed, metals
+        continua = Tuple{Int,Continuum}[]
+        isempty(elements) && return continua
         for (count_column, energy_column, density_column) in (
                 ("N_Cont", "E_Cont", "Continuum"), ("N_Pseudo", "E_Pseudo", "Pseudo"))
             counts = read(hdu, count_column; case_sensitive = false)
@@ -122,10 +114,10 @@ function read_continua(path, index)
                         !all(x -> isfinite(x) && x >= 0, f)
                     throw(ArgumentError("Invalid $density_column data at temperature index $index in $path"))
                 end
-                push!(elements[i] in APEC_METALS ? metals : fixed, Continuum(e, f))
+                push!(continua, (Int(elements[i]), Continuum(e, f)))
             end
         end
-        return fixed, metals
+        return continua
     end
 end
 
@@ -133,9 +125,9 @@ function temperature_slice(db::AtomDB, index::Int)
     return lock(db.cache_lock) do
         slice = db.slices[index]
         if isnothing(slice)
-            fixed_lines, metal_lines = read_lines(db.linefile, index)
-            fixed_continua, metal_continua = read_continua(db.cocofile, index)
-            slice = TemperatureSlice(fixed_continua, metal_continua, fixed_lines, metal_lines)
+            lines = read_lines(db.linefile, index)
+            continua = read_continua(db.cocofile, index)
+            slice = TemperatureSlice(continua, lines)
             db.slices[index] = slice
         end
         return slice

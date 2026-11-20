@@ -1,4 +1,4 @@
-name: Inspect public XSPEC cooling routine
+name: Inspect XSPEC temperature weighting and cooling band
 on: [push]
 permissions:
   contents: read
@@ -12,91 +12,86 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 12
     outputs:
-      part0: ${{ steps.weights.outputs.part0 }}
-      part1: ${{ steps.weights.outputs.part1 }}
-      part2: ${{ steps.weights.outputs.part2 }}
-      part3: ${{ steps.weights.outputs.part3 }}
-      part4: ${{ steps.weights.outputs.part4 }}
-      part5: ${{ steps.weights.outputs.part5 }}
-      part6: ${{ steps.weights.outputs.part6 }}
-      part7: ${{ steps.weights.outputs.part7 }}
-      part8: ${{ steps.weights.outputs.part8 }}
-      part9: ${{ steps.weights.outputs.part9 }}
-      part10: ${{ steps.weights.outputs.part10 }}
-      part11: ${{ steps.weights.outputs.part11 }}
-      part12: ${{ steps.weights.outputs.part12 }}
-      part13: ${{ steps.weights.outputs.part13 }}
-      part14: ${{ steps.weights.outputs.part14 }}
-      part15: ${{ steps.weights.outputs.part15 }}
-      part16: ${{ steps.weights.outputs.part16 }}
-      part17: ${{ steps.weights.outputs.part17 }}
-      part18: ${{ steps.weights.outputs.part18 }}
-      part19: ${{ steps.weights.outputs.part19 }}
-      part20: ${{ steps.weights.outputs.part20 }}
-      part21: ${{ steps.weights.outputs.part21 }}
-      part22: ${{ steps.weights.outputs.part22 }}
-      part23: ${{ steps.weights.outputs.part23 }}
-      part24: ${{ steps.weights.outputs.part24 }}
-      part25: ${{ steps.weights.outputs.part25 }}
-      part26: ${{ steps.weights.outputs.part26 }}
-      part27: ${{ steps.weights.outputs.part27 }}
-      part28: ${{ steps.weights.outputs.part28 }}
-      part29: ${{ steps.weights.outputs.part29 }}
-      part30: ${{ steps.weights.outputs.part30 }}
-      part31: ${{ steps.weights.outputs.part31 }}
-      part32: ${{ steps.weights.outputs.part32 }}
-      part33: ${{ steps.weights.outputs.part33 }}
-      part34: ${{ steps.weights.outputs.part34 }}
-      part35: ${{ steps.weights.outputs.part35 }}
-      part36: ${{ steps.weights.outputs.part36 }}
-      part37: ${{ steps.weights.outputs.part37 }}
-      part38: ${{ steps.weights.outputs.part38 }}
-      part39: ${{ steps.weights.outputs.part39 }}
-      part40: ${{ steps.weights.outputs.part40 }}
-      part41: ${{ steps.weights.outputs.part41 }}
-      part42: ${{ steps.weights.outputs.part42 }}
-      part43: ${{ steps.weights.outputs.part43 }}
-      part44: ${{ steps.weights.outputs.part44 }}
-      part45: ${{ steps.weights.outputs.part45 }}
-      part46: ${{ steps.weights.outputs.part46 }}
-      part47: ${{ steps.weights.outputs.part47 }}
-      part48: ${{ steps.weights.outputs.part48 }}
-      part49: ${{ steps.weights.outputs.part49 }}
-      part50: ${{ steps.weights.outputs.part50 }}
-      part51: ${{ steps.weights.outputs.part51 }}
-      part52: ${{ steps.weights.outputs.part52 }}
-      part53: ${{ steps.weights.outputs.part53 }}
-      part54: ${{ steps.weights.outputs.part54 }}
-      part55: ${{ steps.weights.outputs.part55 }}
-      part56: ${{ steps.weights.outputs.part56 }}
-      part57: ${{ steps.weights.outputs.part57 }}
-      part58: ${{ steps.weights.outputs.part58 }}
-      part59: ${{ steps.weights.outputs.part59 }}
-      part60: ${{ steps.weights.outputs.part60 }}
-      part61: ${{ steps.weights.outputs.part61 }}
-      part62: ${{ steps.weights.outputs.part62 }}
-      part63: ${{ steps.weights.outputs.part63 }}
-      part64: ${{ steps.weights.outputs.part64 }}
-      part65: ${{ steps.weights.outputs.part65 }}
-      part66: ${{ steps.weights.outputs.part66 }}
-      part67: ${{ steps.weights.outputs.part67 }}
-      part68: ${{ steps.weights.outputs.part68 }}
-      part69: ${{ steps.weights.outputs.part69 }}
-      part70: ${{ steps.weights.outputs.part70 }}
-      part71: ${{ steps.weights.outputs.part71 }}
-      part72: ${{ steps.weights.outputs.part72 }}
-      part73: ${{ steps.weights.outputs.part73 }}
-      part74: ${{ steps.weights.outputs.part74 }}
-      part75: ${{ steps.weights.outputs.part75 }}
-      part76: ${{ steps.weights.outputs.part76 }}
-      part77: ${{ steps.weights.outputs.part77 }}
-      part78: ${{ steps.weights.outputs.part78 }}
-      part79: ${{ steps.weights.outputs.part79 }}
-      part80: ${{ steps.weights.outputs.part80 }}
-      part81: ${{ steps.weights.outputs.part81 }}
-      part82: ${{ steps.weights.outputs.part82 }}
-      part83: ${{ steps.weights.outputs.part83 }}
-      part84: ${{ steps.weights.outputs.part84 }}
+      part0: ${{ steps.inspect.outputs.part0 }}
+      part1: ${{ steps.inspect.outputs.part1 }}
+      part2: ${{ steps.inspect.outputs.part2 }}
+      part3: ${{ steps.inspect.outputs.part3 }}
+      part4: ${{ steps.inspect.outputs.part4 }}
+      part5: ${{ steps.inspect.outputs.part5 }}
+      part6: ${{ steps.inspect.outputs.part6 }}
+      part7: ${{ steps.inspect.outputs.part7 }}
+      part8: ${{ steps.inspect.outputs.part8 }}
+      part9: ${{ steps.inspect.outputs.part9 }}
+      part10: ${{ steps.inspect.outputs.part10 }}
+      part11: ${{ steps.inspect.outputs.part11 }}
+      part12: ${{ steps.inspect.outputs.part12 }}
+      part13: ${{ steps.inspect.outputs.part13 }}
+      part14: ${{ steps.inspect.outputs.part14 }}
+      part15: ${{ steps.inspect.outputs.part15 }}
+      part16: ${{ steps.inspect.outputs.part16 }}
+      part17: ${{ steps.inspect.outputs.part17 }}
+      part18: ${{ steps.inspect.outputs.part18 }}
+      part19: ${{ steps.inspect.outputs.part19 }}
+      part20: ${{ steps.inspect.outputs.part20 }}
+      part21: ${{ steps.inspect.outputs.part21 }}
+      part22: ${{ steps.inspect.outputs.part22 }}
+      part23: ${{ steps.inspect.outputs.part23 }}
+      part24: ${{ steps.inspect.outputs.part24 }}
+      part25: ${{ steps.inspect.outputs.part25 }}
+      part26: ${{ steps.inspect.outputs.part26 }}
+      part27: ${{ steps.inspect.outputs.part27 }}
+      part28: ${{ steps.inspect.outputs.part28 }}
+      part29: ${{ steps.inspect.outputs.part29 }}
+      part30: ${{ steps.inspect.outputs.part30 }}
+      part31: ${{ steps.inspect.outputs.part31 }}
+      part32: ${{ steps.inspect.outputs.part32 }}
+      part33: ${{ steps.inspect.outputs.part33 }}
+      part34: ${{ steps.inspect.outputs.part34 }}
+      part35: ${{ steps.inspect.outputs.part35 }}
+      part36: ${{ steps.inspect.outputs.part36 }}
+      part37: ${{ steps.inspect.outputs.part37 }}
+      part38: ${{ steps.inspect.outputs.part38 }}
+      part39: ${{ steps.inspect.outputs.part39 }}
+      part40: ${{ steps.inspect.outputs.part40 }}
+      part41: ${{ steps.inspect.outputs.part41 }}
+      part42: ${{ steps.inspect.outputs.part42 }}
+      part43: ${{ steps.inspect.outputs.part43 }}
+      part44: ${{ steps.inspect.outputs.part44 }}
+      part45: ${{ steps.inspect.outputs.part45 }}
+      part46: ${{ steps.inspect.outputs.part46 }}
+      part47: ${{ steps.inspect.outputs.part47 }}
+      part48: ${{ steps.inspect.outputs.part48 }}
+      part49: ${{ steps.inspect.outputs.part49 }}
+      part50: ${{ steps.inspect.outputs.part50 }}
+      part51: ${{ steps.inspect.outputs.part51 }}
+      part52: ${{ steps.inspect.outputs.part52 }}
+      part53: ${{ steps.inspect.outputs.part53 }}
+      part54: ${{ steps.inspect.outputs.part54 }}
+      part55: ${{ steps.inspect.outputs.part55 }}
+      part56: ${{ steps.inspect.outputs.part56 }}
+      part57: ${{ steps.inspect.outputs.part57 }}
+      part58: ${{ steps.inspect.outputs.part58 }}
+      part59: ${{ steps.inspect.outputs.part59 }}
+      part60: ${{ steps.inspect.outputs.part60 }}
+      part61: ${{ steps.inspect.outputs.part61 }}
+      part62: ${{ steps.inspect.outputs.part62 }}
+      part63: ${{ steps.inspect.outputs.part63 }}
+      part64: ${{ steps.inspect.outputs.part64 }}
+      part65: ${{ steps.inspect.outputs.part65 }}
+      part66: ${{ steps.inspect.outputs.part66 }}
+      part67: ${{ steps.inspect.outputs.part67 }}
+      part68: ${{ steps.inspect.outputs.part68 }}
+      part69: ${{ steps.inspect.outputs.part69 }}
+      part70: ${{ steps.inspect.outputs.part70 }}
+      part71: ${{ steps.inspect.outputs.part71 }}
+      part72: ${{ steps.inspect.outputs.part72 }}
+      part73: ${{ steps.inspect.outputs.part73 }}
+      part74: ${{ steps.inspect.outputs.part74 }}
+      part75: ${{ steps.inspect.outputs.part75 }}
+      part76: ${{ steps.inspect.outputs.part76 }}
+      part77: ${{ steps.inspect.outputs.part77 }}
+      part78: ${{ steps.inspect.outputs.part78 }}
+      part79: ${{ steps.inspect.outputs.part79 }}
     steps:
       - uses: actions/checkout@v4
       - uses: julia-actions/setup-julia@v2
@@ -110,38 +105,52 @@ jobs:
             Pkg.Registry.add(Pkg.RegistrySpec(url="https://github.com/astro-group-bristol/AstroRegistry"))
             Pkg.add(Pkg.PackageSpec(name="LibXSPEC_jll",version="6.35.1"))
           '
-      - name: Read cooling model symbols and disassembly
-        id: weights
+      - name: Read the public cooling-flow routine
+        id: inspect
         run: |
           lib=$(julia --project="$RUNNER_TEMP/refenv" -e 'using LibXSPEC_jll; print(LibXSPEC_jll.libXSFunctions)')
           python - "$lib" <<'PY'
+          import re, subprocess, sys, os, gzip, base64, struct
           from pathlib import Path
-          import re, subprocess, sys, os, gzip, base64
           library=sys.argv[1]
+          raw=Path(library).read_bytes()
           symbols=subprocess.check_output(["nm","-S","--defined-only",library],text=True)
-          candidates=[line for line in symbols.splitlines() if re.search(r'coolflow|xs.?cfl|xsvmcf|calcBolo|xscph|C_cph|[^a-z]cph$',line,re.I)]
-          print(*candidates, sep="\n")
-          selected=[line for line in candidates if not re.search(r'C_[bv]|_cold|[bv]coolflow',line) and re.search(r'coolflow|xs.?cfl|^.* T _Z3cph',line,re.I)]
+          selection=[line for line in symbols.splitlines() if re.search(r' (?:[tT]) (?:[bv]?[v]?cph|.*calcCoolingFlow.*|.*[Bb]olometric.*)$',line) and not re.search(r'cold|global|GLOBAL',line)]
+          sections=subprocess.check_output(["objdump","-h",library],text=True)
+          offsets=[tuple(int(x,16) for x in m) for m in re.findall(r'^\s*\d+\s+\.\w+\s+([0-9a-f]+)\s+([0-9a-f]+)\s+[0-9a-f]+\s+([0-9a-f]+)',sections,re.M)]
           lines=[]
-          for candidate in selected:
-              _,size,_,sym=candidate.split()
-              if int(size,16)>12000:
-                  continue
-              dis=subprocess.check_output(["objdump","-Cd","--disassemble="+sym,library],text=True)
-              if 'Disassembly of section .text:\n\n\n' in dis:
-                  dis=subprocess.check_output(["objdump","-d","--disassemble="+sym,library],text=True)
+          for candidate in selection:
+              start,size,kind,sym=candidate.split()
+              start,size=int(start,16),int(size,16)
+              if size==0 or size>14000: continue
+              dis=subprocess.check_output(["objdump","-Cd",f"--start-address={start}",f"--stop-address={start+size}",library],text=True)
               insns=[]
               for row in dis.splitlines():
-                  if "\t" in row:
-                      r=row.split("\t")
-                      insns.append(r[0].strip()+": "+r[-1].strip())
+                  if "\t" not in row: continue
+                  fields=row.split("\t")
+                  asm=fields[-1].strip()
+                  m=re.search(r'#\s*([0-9a-f]+)',asm)
+                  if m and "(%rip)" in asm:
+                      address = int(m[1],16)
+                      for count,vm,offset in offsets:
+                          if vm <= address < vm+count:
+                              at=offset+address-vm
+                              buf=raw[at:at+8]
+                              if (asm.startswith("movsd") or asm.startswith("mulsd") or asm.startswith("comisd") or asm.startswith("divsd") or asm.startswith("addsd")) and len(buf)==8:
+                                  asm+=" f64="+format(struct.unpack("<d",buf)[0],".12g")
+                              elif asm.startswith("lea"):
+                                  buf=raw[at:at+70].split(b"\0",1)[0]
+                                  if buf and all(32<=v<127 for v in buf):
+                                      asm+=" "+buf.decode()
+                              break
+                  insns.append(fields[0].strip()+" "+asm)
               lines.extend(["-- "+candidate, *insns])
-          payload="\n".join([*candidates, "", *lines])
+          payload="\n".join([*selection, *lines])
           print(payload)
-          encoded=base64.b64encode(gzip.compress(payload.encode())).decode()
+          data=base64.b64encode(gzip.compress(payload.encode())).decode()
           with open(os.environ["GITHUB_OUTPUT"],"a") as out:
-              for i in range(85):
-                  print(f"part{i}="+encoded[190*i:190*(i+1)],file=out)
+              for i in range(80):
+                  print(f"part{i}="+data[i*220:(i+1)*220],file=out)
           PY
   report:
     if: always()
@@ -307,14 +316,4 @@ jobs:
       - name: "part78 ${{ needs.reference.outputs.part78 }}"
         run: 'true'
       - name: "part79 ${{ needs.reference.outputs.part79 }}"
-        run: 'true'
-      - name: "part80 ${{ needs.reference.outputs.part80 }}"
-        run: 'true'
-      - name: "part81 ${{ needs.reference.outputs.part81 }}"
-        run: 'true'
-      - name: "part82 ${{ needs.reference.outputs.part82 }}"
-        run: 'true'
-      - name: "part83 ${{ needs.reference.outputs.part83 }}"
-        run: 'true'
-      - name: "part84 ${{ needs.reference.outputs.part84 }}"
         run: 'true'

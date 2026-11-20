@@ -1,4 +1,4 @@
-name: Validate SpectralFitting APEC variants
+name: Inspect XSPEC cooling-flow weights
 on: [push]
 permissions:
   contents: read
@@ -8,37 +8,133 @@ defaults:
 env:
   JULIA_PKG_PRECOMPILE_AUTO: '0'
 jobs:
-  validate:
+  reference:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 12
     outputs:
-      setup: ${{ steps.setup.outputs.diagnostic }}
-      test: ${{ steps.integration.outputs.diagnostic }}
+      cosmo: ${{ steps.weights.outputs.cosmo }}
+      cool: ${{ steps.weights.outputs.cool }}
+      coolscale: ${{ steps.weights.outputs.coolscale }}
+      old: ${{ steps.weights.outputs.old }}
+      oldscale: ${{ steps.weights.outputs.oldscale }}
+      short: ${{ steps.weights.outputs.short }}
+      shortscale: ${{ steps.weights.outputs.shortscale }}
+      heat: ${{ steps.weights.outputs.heat }}
+      heatscale: ${{ steps.weights.outputs.heatscale }}
+      heat2: ${{ steps.weights.outputs.heat2 }}
+      heat2scale: ${{ steps.weights.outputs.heat2scale }}
+      error: ${{ steps.weights.outputs.error }}
     steps:
       - uses: actions/checkout@v4
       - uses: julia-actions/setup-julia@v2
         with:
           version: '1.10'
-      - name: Set up SpectralFitting 0.7.4 and FITSIO
-        id: setup
+      - name: Install LibXSPEC
         run: |
-          trap 'echo "diagnostic=$(grep -E "ERROR:|LoadError|Unsatisfiable" "$RUNNER_TEMP/setup.log" | tail -1 | cut -c1-180)" >> "$GITHUB_OUTPUT"' ERR
-          julia --color=no --project="$RUNNER_TEMP/integration" -e '
+          julia --project="$RUNNER_TEMP/refenv" -e '
             using Pkg
             Pkg.Registry.add("General")
             Pkg.Registry.add(Pkg.RegistrySpec(url="https://github.com/astro-group-bristol/AstroRegistry"))
-            Pkg.develop(path=pwd())
-            Pkg.add([Pkg.PackageSpec(name="SpectralFitting", version="0.7.4"), Pkg.PackageSpec(name="FITSIO")])
-          ' 2>&1 | tee "$RUNNER_TEMP/setup.log"
-      - name: Evaluate the six SpectralFitting models
-        id: integration
+            Pkg.add(Pkg.PackageSpec(name="LibXSPEC_jll",version="6.35.1"))
+          '
+      - name: Download AtomDB
         run: |
-          trap 'echo "diagnostic=$(grep -E "ERROR:|LoadError|MethodError|UndefVarError|Test Failed" "$RUNNER_TEMP/integration.log" | head -2 | tr "\n" " " | cut -c1-180)" >> "$GITHUB_OUTPUT"' ERR
-          julia --color=no --optimize=0 --compiled-modules=no --project="$RUNNER_TEMP/integration" test/spectralfitting.jl 2>&1 | tee "$RUNNER_TEMP/integration.log"
-  result:
+          cd "$RUNNER_TEMP"
+          curl -fsSL --retry 1 --max-time 150 -o atomdb.tar.bz2 https://hea-www.cfa.harvard.edu/AtomDB/releases/atomdb_v3.1.3.tar.bz2
+          tar -xjf atomdb.tar.bz2 --wildcards '*/apec_v3.1.3_coco.fits' '*/apec_v3.1.3_line.fits'
+      - name: Read temperature sampling from XSPEC
+        id: weights
+        run: |
+          cat > "$RUNNER_TEMP/dem.jl" <<'JULIA'
+          using LibXSPEC_jll, Libdl, Printf
+          const xs = LibXSPEC_jll.libXSFunctions
+          const h = dlopen(xs)
+          const util = dlopen(LibXSPEC_jll.libXSUtil)
+          ccall((:FNINIT, xs), Cvoid, ())
+          setx(key, val) = ccall((:FPMSTR, xs), Cvoid, (Cstring, Cstring), key, val)
+          setx("APECROOT", ARGS[1])
+          function report(key, text)
+              println(key, "=", text)
+              open(ENV["GITHUB_OUTPUT"], "a") do io
+                  println(io, key, "=", text)
+              end
+          end
+          function cosmology(key)
+              p = dlsym_e(h, key)
+              p == C_NULL && (p = dlsym_e(util, key))
+              return p == C_NULL ? NaN : ccall(p, Cfloat, ())
+          end
+          report("cosmo", join(cosmology.((:csmgh0,:csmgq0,:csmgl0)), ","))
+          function weights(symbol)
+              p = Ptr{Ptr{Float64}}(dlsym(h, symbol))
+              start, stop = unsafe_load(p,1), unsafe_load(p,2)
+              n = Int((UInt(stop)-UInt(start)) ÷ sizeof(Float64))
+              return n == 0 ? Float64[] : copy(unsafe_wrap(Vector{Float64},start,n))
+          end
+          function spectrum(symbol, edges, params)
+              n = length(edges)-1
+              out, err = zeros(n), zeros(n)
+              fn = dlsym(h, symbol)
+              ccall(fn,Cvoid,(Ptr{Cdouble},Cint,Ptr{Cdouble},Cint,Ptr{Cdouble},Ptr{Cdouble},Cstring),
+                  edges,n,params,1,out,err,"")
+              return out
+          end
+          const output_edges = collect(range(.3,8.;length=201))
+          const bolometric_edges = collect(10. .^ range(-4.,3.;length=12001))
+          const bolo_centers = (bolometric_edges[1:end-1] .+ bolometric_edges[2:end]) ./ 2
+          fmt(x) = @sprintf("%.8g",x)
+          function runflow(label,symbol,params,z,abun; number=0)
+              setx("CFLOW_NTEMPS", number == 0 ? "" : string(number))
+              flux = spectrum(symbol, output_edges, params)
+              t = weights(:_ZN15FunctionUtility10s_tempsDEME)
+              w = weights(:_ZN15FunctionUtility5s_DEME)
+              k = unique([1,min(2,length(t)),min(3,length(t)), max(1,length(t)-1),length(t)])
+              compact(data) = join(fmt.(data[k]),",")
+              report(label, "n=$(length(t)) T=$(compact(t)) W=$(compact(w)) flux=$(fmt(sum(flux)))")
+              length(t) > 1 || return
+              dlog = log(t[2]/t[1])
+              converted = map(k) do i
+                  bolo = sum(bolo_centers .* spectrum(:C_apec,bolometric_edges,[t[i],abun,0.])) / 1e14 * 1.602176634e-9
+                  endpoint = (i==1 || i==length(t)) ? .5 : 1.
+                  w[i]*bolo/(t[i]*dlog*endpoint)
+              end
+              report(label*"scale",join(fmt.(converted),","))
+          end
+          runflow("cool",:C_coolflow,[.1,4.,.7,.08,2.],.08,.7)
+          runflow("old",:C_xsmkcf,[.1,4.,.7,.08,2.],.08,.7)
+          runflow("short",:C_coolflow,[.3,4.,.7,.20,2.],.2,.7; number=7)
+          runflow("heat",:C_cph,[2.2,.7,.08,2.],.08,.7)
+          runflow("heat2",:C_cph,[0.8,.7,.08,2.],.08,.7)
+          JULIA
+          linefile=$(find "$RUNNER_TEMP" -name 'apec_v3.1.3_line.fits' -print -quit)
+          trap 'echo "error=$(grep -E "ERROR:|LoadError" "$RUNNER_TEMP/run.log" | head -2 | tr "\n" " " | cut -c1-220)" >> "$GITHUB_OUTPUT"' ERR
+          julia --project="$RUNNER_TEMP/refenv" "$RUNNER_TEMP/dem.jl" "${linefile%_line.fits}" 2>&1 | tee "$RUNNER_TEMP/run.log"
+  report:
     if: always()
-    needs: validate
-    name: "Integration result ${{ needs.validate.outputs.test || needs.validate.outputs.setup || needs.validate.result }}"
+    needs: reference
     runs-on: ubuntu-latest
     steps:
-      - run: 'true'
+      - name: "cosmo ${{ needs.reference.outputs.cosmo }}"
+        run: 'true'
+      - name: "cool ${{ needs.reference.outputs.cool }}"
+        run: 'true'
+      - name: "coolscale ${{ needs.reference.outputs.coolscale }}"
+        run: 'true'
+      - name: "old ${{ needs.reference.outputs.old }}"
+        run: 'true'
+      - name: "oldscale ${{ needs.reference.outputs.oldscale }}"
+        run: 'true'
+      - name: "short ${{ needs.reference.outputs.short }}"
+        run: 'true'
+      - name: "shortscale ${{ needs.reference.outputs.shortscale }}"
+        run: 'true'
+      - name: "heat ${{ needs.reference.outputs.heat }}"
+        run: 'true'
+      - name: "heatscale ${{ needs.reference.outputs.heatscale }}"
+        run: 'true'
+      - name: "heat2 ${{ needs.reference.outputs.heat2 }}"
+        run: 'true'
+      - name: "heat2scale ${{ needs.reference.outputs.heat2scale }}"
+        run: 'true'
+      - name: "error ${{ needs.reference.outputs.error }}"
+        run: 'true'

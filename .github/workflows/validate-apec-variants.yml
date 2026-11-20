@@ -1,4 +1,4 @@
-name: Inspect XSPEC temperature weighting and cooling band
+name: Read the XSPEC bolometric energy grid
 on: [push]
 permissions:
   contents: read
@@ -12,86 +12,10 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 12
     outputs:
-      part0: ${{ steps.inspect.outputs.part0 }}
-      part1: ${{ steps.inspect.outputs.part1 }}
-      part2: ${{ steps.inspect.outputs.part2 }}
-      part3: ${{ steps.inspect.outputs.part3 }}
-      part4: ${{ steps.inspect.outputs.part4 }}
-      part5: ${{ steps.inspect.outputs.part5 }}
-      part6: ${{ steps.inspect.outputs.part6 }}
-      part7: ${{ steps.inspect.outputs.part7 }}
-      part8: ${{ steps.inspect.outputs.part8 }}
-      part9: ${{ steps.inspect.outputs.part9 }}
-      part10: ${{ steps.inspect.outputs.part10 }}
-      part11: ${{ steps.inspect.outputs.part11 }}
-      part12: ${{ steps.inspect.outputs.part12 }}
-      part13: ${{ steps.inspect.outputs.part13 }}
-      part14: ${{ steps.inspect.outputs.part14 }}
-      part15: ${{ steps.inspect.outputs.part15 }}
-      part16: ${{ steps.inspect.outputs.part16 }}
-      part17: ${{ steps.inspect.outputs.part17 }}
-      part18: ${{ steps.inspect.outputs.part18 }}
-      part19: ${{ steps.inspect.outputs.part19 }}
-      part20: ${{ steps.inspect.outputs.part20 }}
-      part21: ${{ steps.inspect.outputs.part21 }}
-      part22: ${{ steps.inspect.outputs.part22 }}
-      part23: ${{ steps.inspect.outputs.part23 }}
-      part24: ${{ steps.inspect.outputs.part24 }}
-      part25: ${{ steps.inspect.outputs.part25 }}
-      part26: ${{ steps.inspect.outputs.part26 }}
-      part27: ${{ steps.inspect.outputs.part27 }}
-      part28: ${{ steps.inspect.outputs.part28 }}
-      part29: ${{ steps.inspect.outputs.part29 }}
-      part30: ${{ steps.inspect.outputs.part30 }}
-      part31: ${{ steps.inspect.outputs.part31 }}
-      part32: ${{ steps.inspect.outputs.part32 }}
-      part33: ${{ steps.inspect.outputs.part33 }}
-      part34: ${{ steps.inspect.outputs.part34 }}
-      part35: ${{ steps.inspect.outputs.part35 }}
-      part36: ${{ steps.inspect.outputs.part36 }}
-      part37: ${{ steps.inspect.outputs.part37 }}
-      part38: ${{ steps.inspect.outputs.part38 }}
-      part39: ${{ steps.inspect.outputs.part39 }}
-      part40: ${{ steps.inspect.outputs.part40 }}
-      part41: ${{ steps.inspect.outputs.part41 }}
-      part42: ${{ steps.inspect.outputs.part42 }}
-      part43: ${{ steps.inspect.outputs.part43 }}
-      part44: ${{ steps.inspect.outputs.part44 }}
-      part45: ${{ steps.inspect.outputs.part45 }}
-      part46: ${{ steps.inspect.outputs.part46 }}
-      part47: ${{ steps.inspect.outputs.part47 }}
-      part48: ${{ steps.inspect.outputs.part48 }}
-      part49: ${{ steps.inspect.outputs.part49 }}
-      part50: ${{ steps.inspect.outputs.part50 }}
-      part51: ${{ steps.inspect.outputs.part51 }}
-      part52: ${{ steps.inspect.outputs.part52 }}
-      part53: ${{ steps.inspect.outputs.part53 }}
-      part54: ${{ steps.inspect.outputs.part54 }}
-      part55: ${{ steps.inspect.outputs.part55 }}
-      part56: ${{ steps.inspect.outputs.part56 }}
-      part57: ${{ steps.inspect.outputs.part57 }}
-      part58: ${{ steps.inspect.outputs.part58 }}
-      part59: ${{ steps.inspect.outputs.part59 }}
-      part60: ${{ steps.inspect.outputs.part60 }}
-      part61: ${{ steps.inspect.outputs.part61 }}
-      part62: ${{ steps.inspect.outputs.part62 }}
-      part63: ${{ steps.inspect.outputs.part63 }}
-      part64: ${{ steps.inspect.outputs.part64 }}
-      part65: ${{ steps.inspect.outputs.part65 }}
-      part66: ${{ steps.inspect.outputs.part66 }}
-      part67: ${{ steps.inspect.outputs.part67 }}
-      part68: ${{ steps.inspect.outputs.part68 }}
-      part69: ${{ steps.inspect.outputs.part69 }}
-      part70: ${{ steps.inspect.outputs.part70 }}
-      part71: ${{ steps.inspect.outputs.part71 }}
-      part72: ${{ steps.inspect.outputs.part72 }}
-      part73: ${{ steps.inspect.outputs.part73 }}
-      part74: ${{ steps.inspect.outputs.part74 }}
-      part75: ${{ steps.inspect.outputs.part75 }}
-      part76: ${{ steps.inspect.outputs.part76 }}
-      part77: ${{ steps.inspect.outputs.part77 }}
-      part78: ${{ steps.inspect.outputs.part78 }}
-      part79: ${{ steps.inspect.outputs.part79 }}
+      grid: ${{ steps.metadata.outputs.grid }}
+      detail: ${{ steps.metadata.outputs.detail }}
+      distance: ${{ steps.metadata.outputs.distance }}
+      error: ${{ steps.metadata.outputs.error }}
     steps:
       - uses: actions/checkout@v4
       - uses: julia-actions/setup-julia@v2
@@ -105,215 +29,66 @@ jobs:
             Pkg.Registry.add(Pkg.RegistrySpec(url="https://github.com/astro-group-bristol/AstroRegistry"))
             Pkg.add(Pkg.PackageSpec(name="LibXSPEC_jll",version="6.35.1"))
           '
-      - name: Read the public cooling-flow routine
-        id: inspect
+      - name: Download the reference AtomDB FITS pair
         run: |
-          lib=$(julia --project="$RUNNER_TEMP/refenv" -e 'using LibXSPEC_jll; print(LibXSPEC_jll.libXSFunctions)')
-          python - "$lib" <<'PY'
-          import re, subprocess, sys, os, gzip, base64, struct
-          from pathlib import Path
-          library=sys.argv[1]
-          raw=Path(library).read_bytes()
-          symbols=subprocess.check_output(["nm","-S","--defined-only",library],text=True)
-          selection=[line for line in symbols.splitlines() if re.search(r' (?:[tT]) (?:[bv]?[v]?cph|.*plasmaBolo.*)$',line) and not re.search(r'cold|global|GLOBAL',line)]
-          sections=subprocess.check_output(["objdump","-h",library],text=True)
-          offsets=[tuple(int(x,16) for x in m) for m in re.findall(r'^\s*\d+\s+\.\w+\s+([0-9a-f]+)\s+([0-9a-f]+)\s+[0-9a-f]+\s+([0-9a-f]+)',sections,re.M)]
-          lines=[]
-          for candidate in selection:
-              start,size,kind,sym=candidate.split()
-              start,size=int(start,16),int(size,16)
-              if size==0 or size>14000: continue
-              dis=subprocess.check_output(["objdump","--insn-width=11","-Cd",f"--start-address={start}",f"--stop-address={start+size}",library],text=True)
-              insns=[]
-              for row in dis.splitlines():
-                  if "\t" not in row: continue
-                  fields=row.split("\t")
-                  asm=fields[-1].strip()
-                  m=re.search(r'#\s*([0-9a-f]+)',asm)
-                  if m and "(%rip)" in asm:
-                      address = int(m[1],16)
-                      for count,vm,offset in offsets:
-                          if vm <= address < vm+count:
-                              at=offset+address-vm
-                              buf=raw[at:at+8]
-                              if (asm.startswith("movsd") or asm.startswith("mulsd") or asm.startswith("comisd") or asm.startswith("divsd") or asm.startswith("addsd")) and len(buf)==8:
-                                  asm+=" f64="+format(struct.unpack("<d",buf)[0],".12g")
-                              elif asm.startswith("lea"):
-                                  buf=raw[at:at+70].split(b"\0",1)[0]
-                                  if buf and all(32<=v<127 for v in buf):
-                                      asm+=" "+buf.decode()
-                              break
-                  insns.append(fields[0].strip()+" "+asm.split(" const&")[0])
-              lines.extend(["-- "+candidate, *insns])
-          payload="\n".join([*selection, *lines])
-          print(payload)
-          data=base64.b64encode(gzip.compress(payload.encode())).decode()
-          with open(os.environ["GITHUB_OUTPUT"],"a") as out:
-              for i in range(80):
-                  print(f"part{i}="+data[i*220:(i+1)*220],file=out)
-          PY
+          cd "$RUNNER_TEMP"
+          curl -fsSL --retry 1 --max-time 120 -o atomdb.tar.bz2 https://hea-www.cfa.harvard.edu/AtomDB/releases/atomdb_v3.1.3.tar.bz2
+          tar -xjf atomdb.tar.bz2 --wildcards '*/apec_v3.1.3_coco.fits' '*/apec_v3.1.3_line.fits'
+      - name: Read grid metadata
+        id: metadata
+        run: |
+          cat > "$RUNNER_TEMP/grid.jl" <<'JULIA'
+          using LibXSPEC_jll, Libdl, Printf
+          const lib = LibXSPEC_jll.libXSFunctions
+          const utilpath = LibXSPEC_jll.libXSUtil
+          ccall((:FNINIT, utilpath), Cvoid, ())
+          ccall((:FPMSTR, utilpath), Cvoid, (Cstring, Cstring), "APECROOT", ARGS[1])
+          function report(key, value)
+              open(ENV["GITHUB_OUTPUT"], "a") do io
+                  println(io,key,"=",value)
+              end
+          end
+          function find_symbol(library, target)
+              rows = split(read(`nm -D $library`, String),'\n')
+              return Symbol(last(split(first(filter(line -> occursin(target,line) && occursin(" T ",line), rows)))))
+          end
+          gridfn=find_symbol(lib,"plasmaFileInfo")
+          energy=zeros(UInt,2)
+          temp=zeros(UInt,2)
+          h=dlopen(lib)
+          status=ccall(dlsym(h,gridfn),Cint,(Cint,Ptr{UInt},Ptr{UInt}),6,energy,temp)
+          report("detail","symbol=$(gridfn) status=$(status) grid=$(energy[1]) temps=$(temp[1])")
+          es=unsafe_wrap(Vector{Float64},Ptr{Float64}(energy[2]),Int(energy[1]))
+          probes=unique([1,2,3,4,5,6,10,100,length(es)÷2,length(es)-1,length(es)])
+          report("grid",join(["$i:"*@sprintf("%.12g",es[i]) for i in probes if 1<=i<=length(es)],","))
+          if length(es)>3
+              report("detail","n=$(length(es)) max log-step error=$(maximum(abs,diff(log.(es)) .- log(es[end]/es[1])/(length(es)-1))) max linear-step error=$(maximum(abs,diff(es) .- (es[end]-es[1])/(length(es)-1)))")
+          end
+          try
+              fn=find_symbol(utilpath,"FZSQcl")
+              util=dlopen(utilpath)
+              p=dlsym(util,fn)
+              vals=map([.08,.2,.3,1.]) do z
+                  sqrt(ccall(p,Cdouble,(Ptr{Cvoid},Cdouble,Cdouble,Cdouble),C_NULL,z,0.,Float64(Float32(.73))))
+              end
+              report("distance",join(vals,","))
+          catch err
+              report("distance",repr(err))
+          end
+          JULIA
+          linefile=$(find "$RUNNER_TEMP" -name 'apec_v3.1.3_line.fits' -print -quit)
+          trap 'echo "error=$(grep -E "ERROR:|LoadError|signal" "$RUNNER_TEMP/grid.log" | head -2 | tr "\n" " " | cut -c1-210)" >> "$GITHUB_OUTPUT"' ERR
+          julia --project="$RUNNER_TEMP/refenv" "$RUNNER_TEMP/grid.jl" "${linefile%_line.fits}" 2>&1 | tee "$RUNNER_TEMP/grid.log"
   report:
     if: always()
     needs: reference
     runs-on: ubuntu-latest
     steps:
-      - name: "part0 ${{ needs.reference.outputs.part0 }}"
+      - name: "Grid ${{ needs.reference.outputs.grid }}"
         run: 'true'
-      - name: "part1 ${{ needs.reference.outputs.part1 }}"
+      - name: "Detail ${{ needs.reference.outputs.detail }}"
         run: 'true'
-      - name: "part2 ${{ needs.reference.outputs.part2 }}"
+      - name: "Cosmology ${{ needs.reference.outputs.distance }}"
         run: 'true'
-      - name: "part3 ${{ needs.reference.outputs.part3 }}"
-        run: 'true'
-      - name: "part4 ${{ needs.reference.outputs.part4 }}"
-        run: 'true'
-      - name: "part5 ${{ needs.reference.outputs.part5 }}"
-        run: 'true'
-      - name: "part6 ${{ needs.reference.outputs.part6 }}"
-        run: 'true'
-      - name: "part7 ${{ needs.reference.outputs.part7 }}"
-        run: 'true'
-      - name: "part8 ${{ needs.reference.outputs.part8 }}"
-        run: 'true'
-      - name: "part9 ${{ needs.reference.outputs.part9 }}"
-        run: 'true'
-      - name: "part10 ${{ needs.reference.outputs.part10 }}"
-        run: 'true'
-      - name: "part11 ${{ needs.reference.outputs.part11 }}"
-        run: 'true'
-      - name: "part12 ${{ needs.reference.outputs.part12 }}"
-        run: 'true'
-      - name: "part13 ${{ needs.reference.outputs.part13 }}"
-        run: 'true'
-      - name: "part14 ${{ needs.reference.outputs.part14 }}"
-        run: 'true'
-      - name: "part15 ${{ needs.reference.outputs.part15 }}"
-        run: 'true'
-      - name: "part16 ${{ needs.reference.outputs.part16 }}"
-        run: 'true'
-      - name: "part17 ${{ needs.reference.outputs.part17 }}"
-        run: 'true'
-      - name: "part18 ${{ needs.reference.outputs.part18 }}"
-        run: 'true'
-      - name: "part19 ${{ needs.reference.outputs.part19 }}"
-        run: 'true'
-      - name: "part20 ${{ needs.reference.outputs.part20 }}"
-        run: 'true'
-      - name: "part21 ${{ needs.reference.outputs.part21 }}"
-        run: 'true'
-      - name: "part22 ${{ needs.reference.outputs.part22 }}"
-        run: 'true'
-      - name: "part23 ${{ needs.reference.outputs.part23 }}"
-        run: 'true'
-      - name: "part24 ${{ needs.reference.outputs.part24 }}"
-        run: 'true'
-      - name: "part25 ${{ needs.reference.outputs.part25 }}"
-        run: 'true'
-      - name: "part26 ${{ needs.reference.outputs.part26 }}"
-        run: 'true'
-      - name: "part27 ${{ needs.reference.outputs.part27 }}"
-        run: 'true'
-      - name: "part28 ${{ needs.reference.outputs.part28 }}"
-        run: 'true'
-      - name: "part29 ${{ needs.reference.outputs.part29 }}"
-        run: 'true'
-      - name: "part30 ${{ needs.reference.outputs.part30 }}"
-        run: 'true'
-      - name: "part31 ${{ needs.reference.outputs.part31 }}"
-        run: 'true'
-      - name: "part32 ${{ needs.reference.outputs.part32 }}"
-        run: 'true'
-      - name: "part33 ${{ needs.reference.outputs.part33 }}"
-        run: 'true'
-      - name: "part34 ${{ needs.reference.outputs.part34 }}"
-        run: 'true'
-      - name: "part35 ${{ needs.reference.outputs.part35 }}"
-        run: 'true'
-      - name: "part36 ${{ needs.reference.outputs.part36 }}"
-        run: 'true'
-      - name: "part37 ${{ needs.reference.outputs.part37 }}"
-        run: 'true'
-      - name: "part38 ${{ needs.reference.outputs.part38 }}"
-        run: 'true'
-      - name: "part39 ${{ needs.reference.outputs.part39 }}"
-        run: 'true'
-      - name: "part40 ${{ needs.reference.outputs.part40 }}"
-        run: 'true'
-      - name: "part41 ${{ needs.reference.outputs.part41 }}"
-        run: 'true'
-      - name: "part42 ${{ needs.reference.outputs.part42 }}"
-        run: 'true'
-      - name: "part43 ${{ needs.reference.outputs.part43 }}"
-        run: 'true'
-      - name: "part44 ${{ needs.reference.outputs.part44 }}"
-        run: 'true'
-      - name: "part45 ${{ needs.reference.outputs.part45 }}"
-        run: 'true'
-      - name: "part46 ${{ needs.reference.outputs.part46 }}"
-        run: 'true'
-      - name: "part47 ${{ needs.reference.outputs.part47 }}"
-        run: 'true'
-      - name: "part48 ${{ needs.reference.outputs.part48 }}"
-        run: 'true'
-      - name: "part49 ${{ needs.reference.outputs.part49 }}"
-        run: 'true'
-      - name: "part50 ${{ needs.reference.outputs.part50 }}"
-        run: 'true'
-      - name: "part51 ${{ needs.reference.outputs.part51 }}"
-        run: 'true'
-      - name: "part52 ${{ needs.reference.outputs.part52 }}"
-        run: 'true'
-      - name: "part53 ${{ needs.reference.outputs.part53 }}"
-        run: 'true'
-      - name: "part54 ${{ needs.reference.outputs.part54 }}"
-        run: 'true'
-      - name: "part55 ${{ needs.reference.outputs.part55 }}"
-        run: 'true'
-      - name: "part56 ${{ needs.reference.outputs.part56 }}"
-        run: 'true'
-      - name: "part57 ${{ needs.reference.outputs.part57 }}"
-        run: 'true'
-      - name: "part58 ${{ needs.reference.outputs.part58 }}"
-        run: 'true'
-      - name: "part59 ${{ needs.reference.outputs.part59 }}"
-        run: 'true'
-      - name: "part60 ${{ needs.reference.outputs.part60 }}"
-        run: 'true'
-      - name: "part61 ${{ needs.reference.outputs.part61 }}"
-        run: 'true'
-      - name: "part62 ${{ needs.reference.outputs.part62 }}"
-        run: 'true'
-      - name: "part63 ${{ needs.reference.outputs.part63 }}"
-        run: 'true'
-      - name: "part64 ${{ needs.reference.outputs.part64 }}"
-        run: 'true'
-      - name: "part65 ${{ needs.reference.outputs.part65 }}"
-        run: 'true'
-      - name: "part66 ${{ needs.reference.outputs.part66 }}"
-        run: 'true'
-      - name: "part67 ${{ needs.reference.outputs.part67 }}"
-        run: 'true'
-      - name: "part68 ${{ needs.reference.outputs.part68 }}"
-        run: 'true'
-      - name: "part69 ${{ needs.reference.outputs.part69 }}"
-        run: 'true'
-      - name: "part70 ${{ needs.reference.outputs.part70 }}"
-        run: 'true'
-      - name: "part71 ${{ needs.reference.outputs.part71 }}"
-        run: 'true'
-      - name: "part72 ${{ needs.reference.outputs.part72 }}"
-        run: 'true'
-      - name: "part73 ${{ needs.reference.outputs.part73 }}"
-        run: 'true'
-      - name: "part74 ${{ needs.reference.outputs.part74 }}"
-        run: 'true'
-      - name: "part75 ${{ needs.reference.outputs.part75 }}"
-        run: 'true'
-      - name: "part76 ${{ needs.reference.outputs.part76 }}"
-        run: 'true'
-      - name: "part77 ${{ needs.reference.outputs.part77 }}"
-        run: 'true'
-      - name: "part78 ${{ needs.reference.outputs.part78 }}"
-        run: 'true'
-      - name: "part79 ${{ needs.reference.outputs.part79 }}"
+      - name: "Error ${{ needs.reference.outputs.error }}"
         run: 'true'

@@ -34,6 +34,8 @@ end
             names = SpectralFitting.parameter_names(model)
             @test length(names) == count
             @test names[1:2] == (:K, :kT)
+            copied = copy(model)
+            @test copied.db === model.db && copied.K !== model.K
             @test isapprox(invokemodel(edges, model), expected)
             @test isapprox(invokemodel(edges, model + model), 2 .* expected)
         end

@@ -34,7 +34,7 @@ jobs:
         id: integration
         run: |
           trap 'echo "diagnostic=$(grep -E "ERROR:|LoadError|MethodError|UndefVarError|Test Failed" "$RUNNER_TEMP/integration.log" | head -2 | tr "\n" " " | cut -c1-180)" >> "$GITHUB_OUTPUT"' ERR
-          julia --color=no --compiled-modules=no --project="$RUNNER_TEMP/integration" test/spectralfitting.jl 2>&1 | tee "$RUNNER_TEMP/integration.log"
+          julia --color=no --optimize=0 --compiled-modules=no --project="$RUNNER_TEMP/integration" test/spectralfitting.jl 2>&1 | tee "$RUNNER_TEMP/integration.log"
   result:
     if: always()
     needs: validate

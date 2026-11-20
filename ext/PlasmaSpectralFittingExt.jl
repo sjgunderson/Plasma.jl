@@ -100,6 +100,14 @@ model_abundances(model::Union{VvapecModel,BvvapecModel}) =
 model_velocity(::AbstractApecModel) = 0.0
 model_velocity(model::Union{BapecModel,BvapecModel,BvvapecModel}) = model.velocity
 
+function Base.copy(model::AbstractApecModel{<:FitParam})
+    parameters = copy.(SpectralFitting.parameter_vector(model))
+    # Reuse the AtomDB cache and immutable options across copied components.
+    return SpectralFitting.remake_with_parameters(model, parameters)
+end
+
+Base.copy(model::AbstractApecModel{<:Number}) = model
+
 function SpectralFitting.invoke!(output, edges, model::AbstractApecModel)
     # SpectralFitting applies K when invoking an additive model.
     return evaluate_apec!(output, edges, model.db, model_abundances(model), model.options;

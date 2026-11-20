@@ -81,3 +81,55 @@ end
         end)
     end
 end
+
+@testset "SpectralFitting cooling-flow families" begin
+    mktempdir() do dir
+        db = AtomDB(write_test_apec(joinpath(dir, "cooling")))
+        edges = collect(range(1.0, 13.0; length = 201))
+        distance_mpc, redshift, K = 11.0, 0.02, 0.4
+        for (constructor, evaluator, names, kwargs) in (
+                (Coolflow, coolflow, (:lowT, :highT), (; abundance = 0.6)),
+                (Vcoolflow, vcoolflow, (:lowT, :highT), (; Fe = 0.4, Na = 0.3)),
+                (Bcoolflow, bcoolflow, (:lowT, :highT), (; velocity = 200.0)),
+                (Bvcoolflow, bvcoolflow, (:lowT, :highT), (; velocity = 200.0, Na = 0.3)),
+                (Cph, cph, (:peakT,), (; peakT = 1.5)),
+                (Vcph, vcph, (:peakT,), (; Fe = 0.4, Na = 0.3)),
+                (Bcph, bcph, (:peakT,), (; velocity = 200.0)),
+                (Bvcph, bvcph, (:peakT,), (; velocity = 200.0, Na = 0.3)))
+            model = constructor(db; K, distance_mpc, redshift, abundance_table = :wilm, kwargs...)
+            expected = evaluator(edges, db; norm = K, distance_mpc, redshift, abundance_table = :wilm, kwargs...)
+            @test SpectralFitting.parameter_names(model)[1:(1 + length(names))] == (:K, names...)
+            copied = copy(model)
+            @test copied.db === model.db && copied.K !== model.K
+            @test isapprox(invokemodel(edges, model), expected)
+            @test isapprox(invokemodel(edges, model + model), 2 .* expected)
+        end
+        @test Mkcflow === Coolflow && Vmcflow === Vcoolflow
+        fixed = Coolflow(db; K, redshift, distance_mpc, normalization_redshift = 0.0, bolometric = :direct)
+        rest = Coolflow(db; K, redshift = 0.0, distance_mpc, bolometric = :direct)
+        @test invokemodel(edges ./ (1 + redshift), fixed) ≈ invokemodel(edges, rest)
+        local_K = K / (1e-14 * (1e6 * distance_mpc)^2)
+        @test invokemodel(edges, LocalCoolflow(db; K = local_K, bolometric = :direct)) ≈ invokemodel(edges, rest)
+        for (constructor, evaluator, kwargs) in (
+                (LocalCoolflow, localcoolflow, (;)),
+                (LocalVcoolflow, localvcoolflow, (; Fe = 0.5)),
+                (LocalBcoolflow, localbcoolflow, (; velocity = 200.0)),
+                (LocalBvcoolflow, localbvcoolflow, (; Na = 0.3, velocity = 200.0)),
+                (LocalCph, localcph, (; peakT = 1.5)),
+                (LocalVcph, localvcph, (; Fe = 0.5)),
+                (LocalBcph, localbcph, (; velocity = 200.0)),
+                (LocalBvcph, localbvcph, (; Na = 0.3, velocity = 200.0)))
+            z = -0.125
+            model = constructor(db; K = local_K, redshift = z, kwargs...)
+            @test model.redshift.lower_limit < z
+            @test invokemodel(edges, model) ≈ evaluator(edges, db; norm = local_K, redshift = z, kwargs...)
+            @test invokemodel(edges ./ (1 + z), model) ≈ evaluator(edges, db; norm = local_K, kwargs...)
+        end
+        @test isfinite(SpectralFitting.ForwardDiff.derivative(0.08) do z
+            sum(coolflow(edges, db; redshift = z))
+        end)
+        @test isfinite(SpectralFitting.ForwardDiff.derivative(0.7) do lowT
+            sum(vcoolflow(edges, db; lowT))
+        end)
+    end
+end

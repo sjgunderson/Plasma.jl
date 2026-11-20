@@ -74,15 +74,17 @@ end
 emission_type(temperature::Real) = typeof(temperature)
 emission_type(node_weights::AbstractVector) = eltype(node_weights)
 
-function evaluate_cie(edges, db, abundances, options, emission; redshift, norm, velocity)
+function evaluate_cie(edges, db, abundances, options, emission;
+        redshift, normalization_redshift = redshift, norm, velocity)
     T = promote_type(Float64, eltype(edges), emission_type(emission), typeof(redshift), typeof(norm),
-        typeof(velocity), map(typeof, abundances)...)
+        typeof(normalization_redshift), typeof(velocity), map(typeof, abundances)...)
     output = Vector{T}(undef, max(0, length(edges) - 1))
-    return evaluate_cie!(output, edges, db, abundances, options, emission; redshift, norm, velocity)
+    return evaluate_cie!(output, edges, db, abundances, options, emission;
+        redshift, normalization_redshift, norm, velocity)
 end
 
 function evaluate_cie!(output::AbstractVector, edges::AbstractVector, db, abundances, options, emission;
-        redshift, norm = 1.0, velocity)
+        redshift, normalization_redshift = redshift, norm = 1.0, velocity)
     Base.require_one_based_indexing(output, edges)
     length(edges) >= 2 || throw(ArgumentError("At least two energy edges are required"))
     length(output) == length(edges) - 1 ||
@@ -112,7 +114,7 @@ function evaluate_cie!(output::AbstractVector, edges::AbstractVector, db, abunda
     scales = map(*, promote(abundances...), options.ratios)
 
     add_emission!(output, source_edges, centers, widths, db, emission, scales, options.thermal, velocity)
-    output .*= 1.0e14 * norm / z1
+    output .*= 1.0e14 * norm / (1.0 + normalization_redshift)
     return output
 end
 

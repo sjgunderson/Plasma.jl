@@ -2,6 +2,24 @@ using Plasma, SpectralFitting, Test
 
 include("fixtures.jl")
 
+@testset "Rank lines from a Plasma model" begin
+    mktempdir() do dir
+        db = AtomDB(write_test_apec(joinpath(dir, "model_lines")))
+        model = Vapec(db; kT = 2.0, Fe = 0.25, redshift = 0.1, K = 0.01)
+        fe = only(find_lines(db, 1.0, 4.0; model, element = :Fe))
+        @test fe.id == LineID(:Fe, 17, 5, 1)
+        @test fe.emissivity == 1.5
+        @test fe.wavelength ≈ 2.0
+
+        dem = Wdem(db; Tmax = 2.0, beta = 1.0, abundance = 0.25)
+        @test only(find_lines(db, 1.0, 4.0; model = dem, element = :Fe)).emissivity ≈ fe.emissivity
+
+        cool = LocalCoolflow(db; lowT = 1.0, highT = 3.0, slope = 0.7)
+        @test !isempty(find_lines(db, 1.0, 4.0; model = cool, brightest = 1))
+        @test_throws ArgumentError find_lines(AtomDB(db.linefile, db.cocofile), 1.0, 4.0; model)
+    end
+end
+
 @testset "SpectralFitting APEC model" begin
     mktempdir() do dir
         db = AtomDB(write_test_apec(joinpath(dir, "apec")))

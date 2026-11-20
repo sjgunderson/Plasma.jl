@@ -200,6 +200,44 @@ local_model = LocalCoolflow(db; lowT = 0.2, highT = 1.2,
 local_flux = invokemodel(edges, local_model)
 ```
 
+## Search AtomDB emission lines
+
+Use the same `AtomDB` object that supplies the spectra. Give an energy or
+wavelength interval and either a temperature or a native Plasma.jl model.
+The search reads the CIE line tables and caches the transition IDs for the
+temperatures it visits. A temperature-only search can run without loading
+continuum slices.
+
+```julia
+# Rank O VII lines near the He-like triplet at a specified temperature.
+lines = find_lines(db, 21.5, 22.2; element = :O, ion = 7, kT = 0.2, brightest = 3)
+
+# Track one transition or compare two as a function of temperature.
+temperatures = range(0.1, 0.5; length = 50)
+emissivity = line_emissivity(db, lines[1].id, temperatures)
+ratio = ratio_emissivity(db, lines[1].id, lines[2].id, temperatures)
+
+# Rank by the current temperature distribution and abundances of a native model.
+model = LocalBvcoolflow(db; lowT = 0.1, highT = 2.0, Fe = 0.5)
+strongest = find_lines(db, 0.5, 2.0; unit = :keV, model, brightest = 10)
+```
+
+Bounds are inclusive. Use `unit=:angstrom` (default), `:nm`, `:keV`, or
+`:eV`. Temperatures are in keV by default and `teunit=:K` accepts kelvin.
+Filter by element symbol or atomic number and by spectroscopic ion stage.
+The result exposes `wavelength` in Å, `energy` in keV, and `emissivity` in
+photons cm³ s⁻¹. The `id` contains the element, ion, upper level, and lower
+level. At a specified temperature, use `abundance_table` and
+`abundances=(O=0.5, Fe=1.2)` to adjust the reference composition. The search
+uses the same linear temperature interpolation and endpoint clamping as the
+spectrum models.
+
+Model ranking uses rest-frame emissivities averaged over the model's
+abundance-scaled temperature mixture. Select an individual native APEC,
+Wdem, Cempow, or cooling-flow component when the fitted source is composite.
+Transition IDs are specific to the loaded AtomDB files. Detailed level
+properties and Einstein A values require separate AtomDB atomic data files.
+
 ## Validation
 
 Run `julia --project -e 'using Pkg; Pkg.instantiate(); Pkg.test()'` to check the

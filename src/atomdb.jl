@@ -12,6 +12,27 @@ struct Lines
     elements::Vector{UInt8}
 end
 
+"""
+    LineID(element, ion, upper_level, lower_level)
+
+Identify an AtomDB transition by atomic number or element symbol, spectroscopic
+ion stage, and one-based level indices. For example, O VII has ion stage 7.
+"""
+struct LineID
+    element::Int16
+    ion::Int16
+    upper_level::Int32
+    lower_level::Int32
+
+    function LineID(element, ion::Integer, upper_level::Integer, lower_level::Integer)
+        z = line_atomic_number(element)
+        1 <= ion <= z + 1 || throw(ArgumentError("Invalid spectroscopic ion stage $ion for element $z"))
+        1 <= upper_level <= typemax(Int32) && 1 <= lower_level <= typemax(Int32) ||
+            throw(ArgumentError("AtomDB level indices must be positive 32-bit integers"))
+        return new(z, ion, upper_level, lower_level)
+    end
+end
+
 struct TemperatureSlice
     continua::Vector{Tuple{Int,Continuum}}
     lines::Lines
@@ -31,6 +52,8 @@ struct AtomDB
     cocofile::String
     temperatures::Vector{Float64}
     slices::Vector{Union{Nothing,TemperatureSlice}}
+    line_lists::Vector{Union{Nothing,Lines}}
+    line_ids::Vector{Union{Nothing,Vector{LineID}}}
     bolometric::Vector{Union{Nothing,NTuple{30,Float64}}}
     direct_bolometric::Vector{Union{Nothing,NTuple{30,Float64}}}
     cache_lock::ReentrantLock
@@ -42,8 +65,11 @@ struct AtomDB
         line_temperatures == continuum_temperatures ||
             throw(ArgumentError("AtomDB line and continuum files have different temperature grids"))
         slices = Vector{Union{Nothing,TemperatureSlice}}(nothing, length(line_temperatures))
+        line_lists = Vector{Union{Nothing,Lines}}(nothing, length(line_temperatures))
+        line_ids = Vector{Union{Nothing,Vector{LineID}}}(nothing, length(line_temperatures))
         bolometric = Vector{Union{Nothing,NTuple{30,Float64}}}(nothing, length(line_temperatures))
-        return new(linepath, cocopath, line_temperatures, slices, bolometric, copy(bolometric), ReentrantLock())
+        return new(linepath, cocopath, line_temperatures, slices, line_lists, line_ids,
+            bolometric, copy(bolometric), ReentrantLock())
     end
 end
 
@@ -124,11 +150,22 @@ function read_continua(path, index)
     end
 end
 
+function temperature_lines(db::AtomDB, index::Int)
+    return lock(db.cache_lock) do
+        lines = db.line_lists[index]
+        if isnothing(lines)
+            lines = read_lines(db.linefile, index)
+            db.line_lists[index] = lines
+        end
+        return lines
+    end
+end
+
 function temperature_slice(db::AtomDB, index::Int)
     return lock(db.cache_lock) do
         slice = db.slices[index]
         if isnothing(slice)
-            lines = read_lines(db.linefile, index)
+            lines = temperature_lines(db, index)
             continua = read_continua(db.cocofile, index)
             slice = TemperatureSlice(continua, lines)
             db.slices[index] = slice

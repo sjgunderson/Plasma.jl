@@ -4,6 +4,7 @@ using FITSIO: FITS
 using SpecialFunctions: erf
 
 export AtomDB, solar_abundances
+export LineID, LineMatch, find_lines, line_emissivity, ratio_emissivity
 export Apec, Bapec, Vapec, Vvapec, Bvapec, Bvvapec
 export apec, apec!, bapec, vapec, vvapec, bvapec, bvvapec
 export Wdem, Vwdem, Vvwdem, Bwdem, Bvwdem, Bvvwdem
@@ -25,6 +26,7 @@ include("broadening.jl")
 include("apec.jl")
 include("dem.jl")
 include("cooling.jl")
+include("line_search.jl")
 
 """
     Apec(db::AtomDB; K, kT, abundance, redshift)

@@ -88,7 +88,11 @@ end
 const APEC_METALS = (6, 7, 8, 10, 12, 13, 14, 16, 18, 20, 26, 28)
 const VAPEC_ELEMENTS = (2, APEC_METALS...)
 const VAPEC_NAMES = map(z -> ELEMENT_NAMES[z], VAPEC_ELEMENTS)
-const VAPEC_INDEX = ntuple(z -> something(findfirst(==(z), VAPEC_ELEMENTS), 0), 30)
+element_indices(elements) = ntuple(z -> something(findfirst(==(z), elements), 0), 30)
+const VAPEC_INDEX = element_indices(VAPEC_ELEMENTS)
+const DEM_ELEMENTS = (2, 6, 7, 8, 10, 11, 12, 13, 14, 16, 18, 20, 26, 28)
+const DEM_NAMES = map(z -> ELEMENT_NAMES[z], DEM_ELEMENTS)
+const DEM_INDEX = element_indices(DEM_ELEMENTS)
 
 struct ApecOptions
     ratios::NTuple{30,Float64}
@@ -96,19 +100,19 @@ struct ApecOptions
     thermal::Bool
 end
 
-function apec_options(abundance_table, trace_abundance, thermal_broadening::Bool)
+function apec_options(abundance_table, trace_abundance, thermal_broadening::Bool, indices = VAPEC_INDEX)
     ratios = map(/, Tuple(solar_abundances(abundance_table)), XSPEC_ABUNDANCES.angr)
-    return ApecOptions(ratios, trace_setting(trace_abundance), thermal_broadening)
+    return ApecOptions(ratios, trace_setting(trace_abundance, indices), thermal_broadening)
 end
 
-function trace_setting(value::Real)
+function trace_setting(value::Real, _indices)
     isfinite(value) && value >= 0 || throw(ArgumentError("Trace abundance must be finite and nonnegative"))
     return Float64(value)
 end
 
-function trace_setting(value::Symbol)
+function trace_setting(value::Symbol, indices)
     z = findfirst(==(value), ELEMENT_NAMES)
-    (z == 1 || z in VAPEC_ELEMENTS) ||
+    (!isnothing(z) && (z == 1 || !iszero(indices[z]))) ||
         throw(ArgumentError("Trace abundance must refer to H, He, or a fitted metal, such as :Fe"))
     return z
 end
@@ -120,19 +124,19 @@ function element_parameters(parameters, names)
     return map(name -> get(parameters, name, 1.0), names)
 end
 
-function tied_abundances(abundance, trace::Union{Float64,Int})
-    trace_value = trace isa Int ? (trace in APEC_METALS ? abundance : 1.0) : trace
+function tied_abundances(abundance, trace::Union{Float64,Int}, indices = VAPEC_INDEX)
+    trace_value = trace isa Int ? (trace > 2 && !iszero(indices[trace]) ? abundance : 1.0) : trace
     return ntuple(30) do z
         z <= 2 && return 1.0
-        return z in APEC_METALS ? abundance : trace_value
+        return iszero(indices[z]) ? trace_value : abundance
     end
 end
 
-function partial_abundances(values, trace::Union{Float64,Int})
-    trace_value = trace isa Int ? (trace == 1 ? 1.0 : values[VAPEC_INDEX[trace]]) : trace
+function partial_abundances(values, trace::Union{Float64,Int}, indices = VAPEC_INDEX)
+    trace_value = trace isa Int ? (trace == 1 ? 1.0 : values[indices[trace]]) : trace
     return ntuple(30) do z
         z == 1 && return 1.0
-        index = VAPEC_INDEX[z]
+        index = indices[z]
         return index == 0 ? trace_value : values[index]
     end
 end

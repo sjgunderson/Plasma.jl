@@ -1,24 +1,36 @@
-name: Validate APEC variants
-on: [push, workflow_dispatch]
+name: Validate APEC on AtomDB 3.1.3
+on: [push]
 permissions:
   contents: read
 jobs:
   validate:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 8
     steps:
       - uses: actions/checkout@v4
       - uses: julia-actions/setup-julia@v2
         with:
           version: '1.10'
-      - name: Run native tests
-        run: julia --project -e 'using Pkg; Pkg.test()'
-      - name: Run SpectralFitting integration tests
-        shell: julia {0}
+      - run: julia --project -e 'using Pkg; Pkg.instantiate()'
+      - name: Download public AtomDB 3.1.3 CIE tables
         run: |
-          using Pkg
-          Pkg.activate(; temp = true)
-          Pkg.Registry.add(Pkg.RegistrySpec(url = "https://github.com/astro-group-bristol/AstroRegistry"))
-          Pkg.develop(path = pwd())
-          Pkg.add(Pkg.PackageSpec(name = "SpectralFitting", version = "0.7.4"))
-          include(joinpath(pwd(), "test", "spectralfitting.jl"))
+          mkdir -p "$RUNNER_TEMP/atomdb"
+          cd "$RUNNER_TEMP/atomdb"
+          curl --fail --location --retry 1 --connect-timeout 15 --max-time 120 -o release.tar.bz2 https://hea-www.cfa.harvard.edu/AtomDB/releases/atomdb_v3.1.3.tar.bz2
+          tar -xjf release.tar.bz2 --wildcards '*/apec_v3.1.3_line.fits' '*/apec_v3.1.3_coco.fits'
+      - name: Evaluate all six variants on real CIE emissivities
+        run: |
+          linefile=$(find "$RUNNER_TEMP/atomdb" -name apec_v3.1.3_line.fits -print -quit)
+          test -f "$linefile"
+          julia --project -e '
+            using Plasma, Test
+            db = AtomDB(ARGS[1])
+            edges = range(0.35, 8.0; length=4001)
+            for evaluator in (apec, bapec, vapec, vvapec, bvapec, bvvapec)
+                flux = evaluator(edges, db; kT=0.8, abundance_table=:wilm, norm=1e-3)
+                @test length(flux) == length(edges)-1
+                @test all(x -> isfinite(x) && x >= 0.0, flux)
+                @test sum(flux) > 0.0
+            end
+            @test bapec(edges, db; kT=0.8, velocity=250.0) != apec(edges, db; kT=0.8)
+          ' "${linefile%_line.fits}"

@@ -115,7 +115,7 @@ jobs:
           library=sys.argv[1]
           raw=Path(library).read_bytes()
           symbols=subprocess.check_output(["nm","-S","--defined-only",library],text=True)
-          selection=[line for line in symbols.splitlines() if re.search(r' (?:[tT]) (?:[bv]?[v]?cph|.*calcCoolingFlow.*|.*[Bb]olometric.*)$',line) and not re.search(r'cold|global|GLOBAL',line)]
+          selection=[line for line in symbols.splitlines() if re.search(r' (?:[tT]) (?:[bv]?[v]?cph|.*plasmaBolo.*)$',line) and not re.search(r'cold|global|GLOBAL',line)]
           sections=subprocess.check_output(["objdump","-h",library],text=True)
           offsets=[tuple(int(x,16) for x in m) for m in re.findall(r'^\s*\d+\s+\.\w+\s+([0-9a-f]+)\s+([0-9a-f]+)\s+[0-9a-f]+\s+([0-9a-f]+)',sections,re.M)]
           lines=[]
@@ -123,7 +123,7 @@ jobs:
               start,size,kind,sym=candidate.split()
               start,size=int(start,16),int(size,16)
               if size==0 or size>14000: continue
-              dis=subprocess.check_output(["objdump","-Cd",f"--start-address={start}",f"--stop-address={start+size}",library],text=True)
+              dis=subprocess.check_output(["objdump","--insn-width=11","-Cd",f"--start-address={start}",f"--stop-address={start+size}",library],text=True)
               insns=[]
               for row in dis.splitlines():
                   if "\t" not in row: continue
@@ -143,7 +143,7 @@ jobs:
                                   if buf and all(32<=v<127 for v in buf):
                                       asm+=" "+buf.decode()
                               break
-                  insns.append(fields[0].strip()+" "+asm)
+                  insns.append(fields[0].strip()+" "+asm.split(" const&")[0])
               lines.extend(["-- "+candidate, *insns])
           payload="\n".join([*selection, *lines])
           print(payload)

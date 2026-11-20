@@ -41,8 +41,8 @@ jobs:
           using LibXSPEC_jll, Libdl, Printf
           const lib = LibXSPEC_jll.libXSFunctions
           const utilpath = LibXSPEC_jll.libXSUtil
-          ccall((:FNINIT, utilpath), Cvoid, ())
-          ccall((:FPMSTR, utilpath), Cvoid, (Cstring, Cstring), "APECROOT", ARGS[1])
+          ccall((:FNINIT, lib), Cvoid, ())
+          ccall((:FPMSTR, lib), Cvoid, (Cstring, Cstring), "APECROOT", ARGS[1])
           function report(key, value)
               open(ENV["GITHUB_OUTPUT"], "a") do io
                   println(io,key,"=",value)

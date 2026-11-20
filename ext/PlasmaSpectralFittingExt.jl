@@ -1,8 +1,9 @@
 module PlasmaSpectralFittingExt
 
 using Plasma: AtomDB, ApecOptions, ELEMENT_NAMES, VAPEC_NAMES, apec_options,
-    element_parameters, evaluate_apec!, tied_abundances, partial_abundances
+    element_parameters, evaluate_apec!, tied_abundances, partial_abundances, line_search_temperature
 import Plasma: Apec, Bapec, Vapec, Vvapec, Bvapec, Bvvapec
+import Plasma: line_model_state
 using SpectralFitting: AbstractSpectralModel, Additive, FitParam
 import SpectralFitting
 
@@ -117,5 +118,28 @@ end
 
 include("dem.jl")
 include("cooling.jl")
+
+function line_model_state(db::AtomDB, model::AbstractCIEModel{<:FitParam})
+    values = map(parameter -> parameter.value, SpectralFitting.parameter_vector(model))
+    return line_model_state(db, SpectralFitting.remake_with_parameters(model, values))
+end
+
+function line_model_state(db::AtomDB, model::AbstractCIEModel{<:Number})
+    model.db === db || throw(ArgumentError("Search with the model's AtomDB object"))
+    abundances = model_abundances(model)
+    all(value -> isfinite(value) && value >= 0, abundances) ||
+        throw(DomainError(abundances, "Element abundances must be nonnegative and finite"))
+    scales = map(*, promote(abundances...), model.options.ratios)
+    weights = line_model_weights(model, abundances)
+    total = sum(weights)
+    return iszero(total) ? (weights, scales) : (weights ./ total, scales)
+end
+
+line_model_weights(model::AbstractApecModel, _abundances) =
+    dem_node_weights(model.db, ((line_search_temperature(model.kT, :keV),), (1.0,)))
+line_model_weights(model::AbstractDemModel, _abundances) =
+    dem_node_weights(model.db, dem_sampling(model))
+line_model_weights(model::AbstractCoolingModel, abundances) =
+    model_cooling_weights(model, abundances, cooling_norm_redshift(model.cooling, model.redshift))
 
 end

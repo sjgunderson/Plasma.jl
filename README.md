@@ -116,6 +116,8 @@ other_flux = cempow(edges, db; Tmax=1.5, alpha=0.8, norm=1e-3)
 | Isobaric cooling flow | `Coolflow`, `Vcoolflow`, `Bcoolflow`, `Bvcoolflow` | `coolflow`, `vcoolflow`, `bcoolflow`, `bvcoolflow` |
 | Legacy aliases | `Mkcflow`, `Vmcflow` | `mkcflow`, `vmcflow` |
 | Cooling plus heating | `Cph`, `Vcph`, `Bcph`, `Bvcph` | `cph`, `vcph`, `bcph`, `bvcph` |
+| Local cooling flow | `LocalCoolflow`, `LocalVcoolflow`, `LocalBcoolflow`, `LocalBvcoolflow` | `localcoolflow`, `localvcoolflow`, `localbcoolflow`, `localbvcoolflow` |
+| Local cooling plus heating | `LocalCph`, `LocalVcph`, `LocalBcph`, `LocalBvcph` | `localcph`, `localvcph`, `localbcph`, `localbvcph` |
 
 Both families use the AtomDB CIE backend (`switch=2`). The isobaric models
 integrate over `lowT` to `highT` in keV, weighting the emission measure by
@@ -142,18 +144,22 @@ By default, `redshift` also supplies the normalization's photon arrival-rate
 factor. Set `normalization_redshift` to fix both redshift-dependent parts of
 the normalization while varying the spectral shift with `redshift`.
 A positive `normalization_redshift` can supply the cosmological distance.
-For a shift-only redshift and a known distance, set `distance_mpc` and
-`normalization_redshift=0.0`. These options apply to both model families.
 The `V` and `B` variants follow the abundance and broadening conventions of
 `Cempow`.
+
+The local families require a positive `distance_mpc` and default to
+`redshift=0.0`. Distance sets the normalization, and the signed `redshift`
+only shifts the spectrum. A negative value blueshifts the lines.
 
 ```julia
 model = Bvcoolflow(db; lowT = 0.3, highT = 4.0, redshift = 0.08,
     K = 25.0, Fe = FitParam(0.5), velocity = 200.0)
 flux = invokemodel(edges, model)
 
-local_flux = coolflow(edges, db; lowT = 0.2, highT = 1.2,
-    redshift = 0.0002, distance_mpc = 0.002, normalization_redshift = 0.0, norm = 1e-9)
+local_model = LocalCoolflow(db; lowT = 0.2, highT = 1.2,
+    redshift = FitParam(-0.0002; lower_limit = -0.01, upper_limit = 0.01),
+    distance_mpc = 0.002, K = 1e-9)
+local_flux = invokemodel(edges, local_model)
 ```
 
 ## Validation

@@ -12,6 +12,16 @@ const CPH_VARIANTS = (
     (:bvcph, :Bvcph, :BvcphModel, :partial, true),
 )
 
+function local_cooling_variants(variants)
+    return map(variants) do variant
+        evaluator, constructor, model, mode, broadened = variant
+        (Symbol("local", evaluator), Symbol("Local", constructor), Symbol("Local", model), mode, broadened)
+    end
+end
+
+const LOCAL_COOLFLOW_VARIANTS = local_cooling_variants(COOLFLOW_VARIANTS)
+const LOCAL_CPH_VARIANTS = local_cooling_variants(CPH_VARIANTS)
+
 const COOLING_NTEMPS = 10
 const CPH_LIMITS = (0.01, 50.0)
 const MPC_CM = 3.0856775814913673e24
@@ -264,6 +274,27 @@ for (evaluator, _, _, mode, broadened) in CPH_VARIANTS
             redshift, normalization_redshift = z_norm, norm, velocity)
     end
 end
+
+for (variants, local_variants) in ((COOLFLOW_VARIANTS, LOCAL_COOLFLOW_VARIANTS), (CPH_VARIANTS, LOCAL_CPH_VARIANTS))
+    for (variant, local_variant) in zip(variants, local_variants)
+        evaluator, local_evaluator = first(variant), first(local_variant)
+        @eval function $local_evaluator(edges::AbstractVector, db::AtomDB;
+                distance_mpc::Real, redshift::Real = 0.0, kwargs...)
+            if haskey(kwargs, :normalization_redshift)
+                throw(ArgumentError("Local models use distance_mpc and a shift-only redshift"))
+            end
+            return $evaluator(edges, db; distance_mpc, redshift, kwargs..., normalization_redshift = 0.0)
+        end
+    end
+end
+
+@doc """
+    localcoolflow(edges, db::AtomDB; distance_mpc, redshift=0.0, norm=1.0, ...)
+
+Evaluate cooling flow at a known distance in Mpc. The spectral shift is
+signed. Negative redshift moves lines to higher energy. `norm` is the mass
+accretion rate in solar masses per year.
+""" localcoolflow
 
 const mkcflow = coolflow
 const vmcflow = vcoolflow

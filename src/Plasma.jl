@@ -14,6 +14,10 @@ export Coolflow, Vcoolflow, Bcoolflow, Bvcoolflow, Mkcflow, Vmcflow
 export Cph, Vcph, Bcph, Bvcph, CoolingCosmology
 export coolflow, vcoolflow, bcoolflow, bvcoolflow, mkcflow, vmcflow
 export cph, vcph, bcph, bvcph
+export LocalCoolflow, LocalVcoolflow, LocalBcoolflow, LocalBvcoolflow
+export LocalCph, LocalVcph, LocalBcph, LocalBvcph
+export localcoolflow, localvcoolflow, localbcoolflow, localbvcoolflow
+export localcph, localvcph, localbcph, localbvcph
 
 include("abundances.jl")
 include("atomdb.jl")
@@ -49,9 +53,20 @@ function Bvapec end
 function Bvvapec end
 
 # The SpectralFitting extension provides the constructors for these model types.
-for (_, constructor, _, _, _) in (WDEM_VARIANTS..., CEMPOW_VARIANTS..., COOLFLOW_VARIANTS..., CPH_VARIANTS...)
-    @eval function $constructor end
+for variants in (WDEM_VARIANTS, CEMPOW_VARIANTS, COOLFLOW_VARIANTS, CPH_VARIANTS,
+        LOCAL_COOLFLOW_VARIANTS, LOCAL_CPH_VARIANTS)
+    for (_, constructor, _, _, _) in variants
+        @eval function $constructor end
+    end
 end
+
+@doc """
+    LocalCoolflow(db::AtomDB; distance_mpc, redshift=0.0, K=1.0, ...)
+
+Fit-ready cooling flow at a known distance. `K` is the mass accretion rate in
+solar masses per year. The signed spectral `redshift` can be fitted without
+changing the normalization.
+""" LocalCoolflow
 
 const Mkcflow = Coolflow
 const Vmcflow = Vcoolflow

@@ -6,24 +6,71 @@ Evaluate the unbroadened single-temperature XSPEC APEC spectrum in Julia.
 The output is integrated photon flux per bin in photons cm⁻² s⁻¹.
 `kT` is in keV, `abundance` scales the 12 fitted metals relative to `angr`,
 and `norm` is the XSPEC APEC normalization. H, He, and the trace elements
-retain their `angr` abundances. Temperatures outside the table use the
-nearest tabulated temperature.
+retain their reference abundances by default. Choose a different XSPEC
+table with `abundance_table`, or a trace-element multiplier or tie with
+`trace_abundance`. Temperatures outside the table use the nearest tabulated
+temperature.
 """
-function apec(edges::AbstractVector, db::AtomDB;
-        kT::Real = 1.0, abundance::Real = 1.0, redshift::Real = 0.0, norm::Real = 1.0)
-    T = promote_type(Float64, eltype(edges), typeof(kT), typeof(abundance), typeof(redshift), typeof(norm))
-    output = Vector{T}(undef, max(0, length(edges) - 1))
-    return apec!(output, edges, db; kT, abundance, redshift, norm)
+function apec(edges::AbstractVector, db::AtomDB; abundance::Real = 1.0, abundance_table = :angr,
+        trace_abundance = 1.0, thermal_broadening::Bool = false, kwargs...)
+    options = apec_options(abundance_table, trace_abundance, thermal_broadening)
+    return evaluate_apec(edges, db, tied_abundances(abundance, options.trace), options; kwargs...)
 end
 
 """
-    apec!(output, edges, db; kT = 1.0, abundance = 1.0, redshift = 0.0, norm = 1.0)
+    apec!(output, edges, db; kwargs...)
 
 Evaluate [`apec`](@ref) into a preallocated output vector of length
 `length(edges) - 1`, overwriting the previous spectrum.
 """
-function apec!(output::AbstractVector, edges::AbstractVector, db::AtomDB;
-        kT::Real = 1.0, abundance::Real = 1.0, redshift::Real = 0.0, norm::Real = 1.0)
+function apec!(output::AbstractVector, edges::AbstractVector, db::AtomDB; abundance::Real = 1.0,
+        abundance_table = :angr, trace_abundance = 1.0, thermal_broadening::Bool = false, kwargs...)
+    options = apec_options(abundance_table, trace_abundance, thermal_broadening)
+    return evaluate_apec!(output, edges, db, tied_abundances(abundance, options.trace), options; kwargs...)
+end
+
+"""Evaluate APEC with thermal broadening and a Gaussian `velocity` sigma in km/s."""
+function bapec(edges, db::AtomDB; thermal_broadening::Bool = true, kwargs...)
+    return apec(edges, db; thermal_broadening, kwargs...)
+end
+
+"""Evaluate APEC with independent He and 12 metal abundances, e.g. `vapec(edges, db; Fe=0.4)`."""
+function vapec(edges, db::AtomDB; kT::Real = 6.5, redshift::Real = 0.0, norm::Real = 1.0,
+        velocity::Real = 0.0, abundance_table = :angr, trace_abundance = 1.0,
+        thermal_broadening::Bool = false, elements...)
+    options = apec_options(abundance_table, trace_abundance, thermal_broadening)
+    abundances = partial_abundances(element_parameters(elements, VAPEC_NAMES), options.trace)
+    return evaluate_apec(edges, db, abundances, options; kT, redshift, norm, velocity)
+end
+
+"""Evaluate APEC with independent abundances from H through Zn, all defaulting to 1."""
+function vvapec(edges, db::AtomDB; kT::Real = 6.5, redshift::Real = 0.0, norm::Real = 1.0,
+        velocity::Real = 0.0, abundance_table = :angr, thermal_broadening::Bool = false, elements...)
+    options = apec_options(abundance_table, 1.0, thermal_broadening)
+    abundances = element_parameters(elements, ELEMENT_NAMES)
+    return evaluate_apec(edges, db, abundances, options; kT, redshift, norm, velocity)
+end
+
+"""Evaluate Vapec with thermal broadening and a Gaussian `velocity` sigma in km/s."""
+function bvapec(edges, db::AtomDB; thermal_broadening::Bool = true, kwargs...)
+    return vapec(edges, db; thermal_broadening, kwargs...)
+end
+
+"""Evaluate Vvapec with thermal broadening and a Gaussian `velocity` sigma in km/s."""
+function bvvapec(edges, db::AtomDB; thermal_broadening::Bool = true, kwargs...)
+    return vvapec(edges, db; thermal_broadening, kwargs...)
+end
+
+function evaluate_apec(edges::AbstractVector, db, abundances, options;
+        kT::Real = 1.0, redshift::Real = 0.0, norm::Real = 1.0, velocity::Real = 0.0)
+    T = promote_type(Float64, eltype(edges), typeof(kT), typeof(redshift), typeof(norm),
+        typeof(velocity), map(typeof, abundances)...)
+    output = Vector{T}(undef, max(0, length(edges) - 1))
+    return evaluate_apec!(output, edges, db, abundances, options; kT, redshift, norm, velocity)
+end
+
+function evaluate_apec!(output::AbstractVector, edges::AbstractVector, db, abundances, options;
+        kT::Real = 1.0, redshift::Real = 0.0, norm::Real = 1.0, velocity::Real = 0.0)
     Base.require_one_based_indexing(output, edges)
     length(edges) >= 2 || throw(ArgumentError("At least two energy edges are required"))
     length(output) == length(edges) - 1 ||
@@ -31,14 +78,17 @@ function apec!(output::AbstractVector, edges::AbstractVector, db::AtomDB;
     if !(0 < kT && isfinite(kT))
         throw(DomainError(kT, "Plasma temperature must be positive and finite"))
     end
-    if !(0 <= abundance && isfinite(abundance))
-        throw(DomainError(abundance, "Metal abundance must be nonnegative and finite"))
+    if !all(value -> value isa Real && 0 <= value && isfinite(value), abundances)
+        throw(DomainError(abundances, "Element abundances must be nonnegative and finite"))
     end
     if !(-1 < redshift && isfinite(redshift))
         throw(DomainError(redshift, "Redshift must be finite and greater than -1"))
     end
     if !(0 <= norm && isfinite(norm))
         throw(DomainError(norm, "Normalization must be nonnegative and finite"))
+    end
+    if !(0 <= velocity && isfinite(velocity))
+        throw(DomainError(velocity, "Velocity broadening must be nonnegative and finite"))
     end
 
     z1 = 1.0 + redshift
@@ -50,31 +100,34 @@ function apec!(output::AbstractVector, edges::AbstractVector, db::AtomDB;
     widths = diff(source_edges)
     centers = [source_edges[i] + widths[i] / 2 for i in eachindex(output)]
     fill!(output, zero(eltype(output)))
+    scales = map(*, promote(abundances...), options.ratios)
 
     temperatures = db.temperatures
     lower = searchsortedlast(temperatures, kT)
     if lower == 0 || lower == length(temperatures) || kT == temperatures[lower]
         index = max(1, lower)
-        add_slice!(output, source_edges, centers, widths, temperature_slice(db, index), abundance, 1.0)
+        add_slice!(output, source_edges, centers, widths, db, index, scales, 1.0, options.thermal, velocity)
     else
         upper = lower + 1
         fraction = (kT - temperatures[lower]) / (temperatures[upper] - temperatures[lower])
-        add_slice!(output, source_edges, centers, widths, temperature_slice(db, lower), abundance, 1 - fraction)
-        add_slice!(output, source_edges, centers, widths, temperature_slice(db, upper), abundance, fraction)
+        add_slice!(output, source_edges, centers, widths, db, lower, scales, 1 - fraction, options.thermal, velocity)
+        add_slice!(output, source_edges, centers, widths, db, upper, scales, fraction, options.thermal, velocity)
     end
     output .*= 1.0e14 * norm / z1
     return output
 end
 
-function add_slice!(output, edges, centers, widths, slice, abundance, weight)
-    for continuum in slice.fixed_continua
-        add_continuum!(output, centers, widths, continuum, weight)
+function add_slice!(output, edges, centers, widths, db, index, scales, weight, thermal, velocity)
+    slice = temperature_slice(db, index)
+    for (z, continuum) in slice.continua
+        add_continuum!(output, centers, widths, continuum, weight * scales[z])
     end
-    for continuum in slice.metal_continua
-        add_continuum!(output, centers, widths, continuum, weight * abundance)
+    if thermal || !iszero(velocity)
+        fractions = line_width_fractions(db.temperatures[index], thermal, velocity)
+        add_broadened_lines!(output, edges, slice.lines, scales, weight, fractions)
+    else
+        add_lines!(output, edges, slice.lines, scales, weight)
     end
-    add_lines!(output, edges, slice.fixed_lines, weight)
-    add_lines!(output, edges, slice.metal_lines, weight * abundance)
     return nothing
 end
 
@@ -104,7 +157,7 @@ function add_continuum!(output, centers, widths, continuum, weight)
     return nothing
 end
 
-function add_lines!(output, edges, lines, weight)
+function add_lines!(output, edges, lines, scales, weight)
     energies, emissivities = lines.energies, lines.emissivities
     firstline = searchsortedfirst(energies, first(edges))
     lastline = searchsortedlast(energies, last(edges))
@@ -115,7 +168,7 @@ function add_lines!(output, edges, lines, weight)
         while i < length(output) && energies[j] > edges[i + 1]
             i += 1
         end
-        output[i] += weight * emissivities[j]
+        output[i] += weight * scales[lines.elements[j]] * emissivities[j]
     end
     return nothing
 end

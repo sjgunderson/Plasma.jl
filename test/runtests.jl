@@ -66,3 +66,61 @@ end
     Plasma.add_continuum!(flux, [2.0, 3.5, 5.0], [2.0, 2.0, 1.0], continuum, 1.0)
     @test isapprox(flux, [2.0, 4.0, 0.0])
 end
+
+@testset "APEC variants and elemental abundances" begin
+    mktempdir() do dir
+        db = AtomDB(write_test_apec(joinpath(dir, "variants"); variable_continuum = true))
+        edges = [1.0, 4.0, 8.0, 13.0]
+        H, Fe, Na = [8.0, 8.0, 10.0], [3.0, 7.0, 5.0], [3.0, 4.0, 10.0]
+        @test isapprox(vapec(edges, db; kT = 1.0, Fe = 0.0), 1e14 .* (H .+ Na))
+        @test isapprox(vvapec(edges, db; kT = 1.0, H = 0.0, Na = 0.0), 1e14 .* Fe)
+        @test isapprox(vapec(edges, db; kT = 1.0, Fe = 0.3, trace_abundance = :Fe),
+            1e14 .* (H .+ 0.3 .* (Fe .+ Na)))
+        @test isapprox(apec(edges, db; kT = 1.0, abundance = 0.3, trace_abundance = :Fe),
+            1e14 .* (H .+ 0.3 .* (Fe .+ Na)))
+        @test_throws ArgumentError vapec(edges, db; Na = 0.2)
+        @test_throws ArgumentError vapec(edges, db; trace_abundance = :Na)
+        @test_throws DomainError bapec(edges, db; velocity = -1.0)
+
+        angr, wilm = solar_abundances(:angr), solar_abundances(:wilm)
+        expected = 1e14 .* (H .+ Fe .* (wilm.Fe / angr.Fe) .+ Na .* (wilm.Na / angr.Na))
+        @test isapprox(apec(edges, db; kT = 1.0, abundance_table = :wilm), expected)
+        @test isapprox(vvapec(edges, db; kT = 1.0, abundance_table = :wilm), expected)
+        path = joinpath(dir, "abundances.txt")
+        write(path, join(values(wilm), '\n') * "\n")
+        @test solar_abundances(path) == wilm
+        @test isapprox(apec(edges, db; kT = 1.0, abundance_table = path), expected)
+
+        fine = collect(range(1.0, 13.0; length = 12_001))
+        plain = apec(fine, db; kT = 2.0)
+        @test bapec(fine, db; kT = 2.0, thermal_broadening = false) == plain
+        thermal = bapec(fine, db; kT = 2.0)
+        broadened = bapec(fine, db; kT = 2.0, velocity = 300.0)
+        @test !isapprox(thermal, plain)
+        @test !isapprox(broadened, thermal)
+        @test isapprox(sum(broadened), sum(plain))
+        @test isapprox(bvapec(fine, db; kT = 2.0, velocity = 300.0), broadened)
+        @test isapprox(bvvapec(fine, db; kT = 2.0, velocity = 300.0), broadened)
+    end
+end
+
+@testset "XSPEC abundance tables and Gaussian line integral" begin
+    for table in (:angr, :aspl, :feld, :aneb, :grsa, :wilm, :lodd, :lpgp, :lpgs, :felc)
+        row = solar_abundances(table)
+        @test length(row) == 30 && row.H == 1 && all(>=(0), row)
+    end
+    @test solar_abundances(:angr).Fe == 4.68e-5
+    @test solar_abundances(:wilm).Zn == 0
+    @test solar_abundances(:felc).Fe == 1.26e-4
+    @test_throws ArgumentError solar_abundances(:unknown)
+
+    thermal = Plasma.line_width_fractions(1.0, true, 0.0)
+    mixed = Plasma.line_width_fractions(1.0, true, 300.0)
+    @test isapprox(thermal[1] / thermal[26], sqrt(Plasma.ATOMIC_MASSES[26] / Plasma.ATOMIC_MASSES[1]))
+    @test isapprox(mixed[26], hypot(thermal[26], 300.0 / Plasma.LIGHT_SPEED_KM_S))
+    lines = Plasma.Lines([5.0], Float32[2.0], UInt8[26])
+    out = zeros(4)
+    Plasma.add_broadened_lines!(out, [0.0, 4.5, 5.0, 5.5, 10.0], lines,
+        ntuple(_ -> 1.0, 30), 1.0, ntuple(_ -> 0.1, 30))
+    @test isapprox(out, [0.3173105078629141, 0.6826894921370859, 0.6826894921370859, 0.3173105078629141])
+end

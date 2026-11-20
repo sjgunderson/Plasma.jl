@@ -24,7 +24,6 @@ const LOCAL_CPH_VARIANTS = local_cooling_variants(CPH_VARIANTS)
 
 const COOLING_NTEMPS = 10
 const CPH_LIMITS = (0.01, 50.0)
-const CFLOW_PIVOT_KEV = 1e7 / 11604505.0 # XSPEC's 10⁷ K emissivity pivot
 const MPC_CM = 3.0856775814913673e24
 const PC_CM = MPC_CM / 1e6
 const LOCAL_COOLING_NORM_UNIT = 1e-14 # solar masses per year per square parsec
@@ -256,7 +255,7 @@ function cooling_weights(db, abundances, options, settings, z_norm, lowT, highT;
         end
         iszero(cooling) && return zero(cooling * norm * slope)
         endpoint = i == 1 || i == length(temperatures)
-        power = (temperature / CFLOW_PIVOT_KEV)^slope
+        power = (temperature / highT)^slope
         return norm * temperature * (endpoint ? logstep / 2 : logstep) * power / cooling
     end
     return dem_node_weights(db, (temperatures, emission_measures))
@@ -336,7 +335,7 @@ the squared source distance, in units of 10⁻¹⁴ solar masses per year per
 square parsec.
 The signed spectral redshift is independent of the normalization.
 The optional `slope` multiplies each temperature's emission measure by
-`(T / 10⁷ K)^slope`, with both temperatures in the same units.
+`(T / highT)^slope`.
 """ localcoolflow
 
 const mkcflow = coolflow

@@ -64,8 +64,8 @@ end
     Coolflow(db::AtomDB; lowT=0.1, highT=4.0, slope=0.0, ...)
 
 Fit-ready AtomDB cooling flow. The dimensionless `slope` multiplies the
-emission measure at each temperature by the XSPEC `cflow` power law
-`(T / 10⁷ K)^slope`. Pass a `FitParam` to fit the slope.
+emission measure at each temperature by `(T / highT)^slope`.
+Pass a `FitParam` to fit the slope.
 """ Coolflow
 
 @doc """

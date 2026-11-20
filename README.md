@@ -149,15 +149,15 @@ cooling-plus-heating models take `peakT` (default 2.2 keV) and integrate from
 Set `ntemps` to change the sample count, analogous to XSPEC's `CFLOW_NTEMPS`.
 
 All `Coolflow` and `LocalCoolflow` variants accept a dimensionless `slope`.
-It multiplies each temperature's emission measure by `(T / Tpivot)^slope`,
-where `Tpivot = 10⁷ K ≈ 0.862 keV`. Positive slopes favor hotter gas relative
-to cooler gas. The default `slope=0.0` gives ordinary isobaric cooling flow.
+It multiplies each temperature's emission measure by `(T / highT)^slope`.
+The factor is one at the upper temperature. Positive slopes suppress the
+cooler contributions. The default `slope=0.0` gives ordinary isobaric cooling flow.
 Numeric slopes are frozen in SpectralFitting. Use `slope=FitParam(0.5)` to
 fit the slope.
 
-The weighting follows XSPEC's [`cflow` model](https://heasarc.gsfc.nasa.gov/docs/software/xspec/manual/XSmodelCflow.html).
 Plasma.jl uses AtomDB for both the spectra and the bolometric emissivity.
-XSPEC's legacy `cflow` uses a Raymond–Smith table.
+XSPEC's legacy [`cflow` model](https://heasarc.gsfc.nasa.gov/docs/software/xspec/manual/XSmodelCflow.html)
+uses a fixed 10⁷ K pivot and a Raymond–Smith table.
 
 The cooling-plus-heating models follow the effective XSPEC 12.15 heating
 prescription. At `peakT ≥ 1` keV the heating term uses a 1 keV emissivity

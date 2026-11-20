@@ -27,7 +27,7 @@
         # The fixture spectrum and bolometric emissivity both scale with kT.
         # With two temperature samples only the trapezoid endpoints contribute.
         for slope in (-1.0, 1.0)
-            factor = (1.1604505 * t1)^slope + 3 * (1.1604505 * t2)^slope
+            factor = (t1 / t2)^slope + 3
             sloped = coolflow(edges, db; args..., bolometric = :direct, slope)
             @test sloped ≈ expected .* (factor / 4)
         end

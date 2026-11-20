@@ -13,9 +13,9 @@ The loader accepts fixed-width and variable-length continuum columns.
 | [`Apec`](#apec-variants-and-abundance-tables) | Plasma at one temperature | `kT` | XSPEC APEC emission-measure normalization |
 | [`Wdem`](#multi-temperature-models) | Power-law differential emission measure with a low-temperature cutoff | `Tmax`, `beta`, `inv_slope` | APEC scale applied to weights that sum to one |
 | [`Cempow`](#multi-temperature-models) | Power-law emission measure sampled at logarithmic temperature intervals | `alpha`, `Tmax` | APEC scale applied to the absolute weights |
-| [`Coolflow`](#cooling-flow-models) | Isobaric cooling over a temperature range | `lowT`, `highT` | Solar masses per year |
+| [`Coolflow`](#cooling-flow-models) | Isobaric cooling with optional power-law emissivity weighting | `lowT`, `highT`, `slope` | Solar masses per year |
 | [`Cph`](#cooling-flow-models) | Cooling and heating in a multi-temperature plasma | `peakT` | Solar masses per year |
-| [`LocalCoolflow`](#cooling-flow-models) | Isobaric cooling with a signed spectral shift for a nearby source | `lowT`, `highT` | 10⁻¹⁴ solar masses per year per square parsec |
+| [`LocalCoolflow`](#cooling-flow-models) | Cooling flow with a signed spectral shift for a nearby source | `lowT`, `highT`, `slope` | 10⁻¹⁴ solar masses per year per square parsec |
 | [`LocalCph`](#cooling-flow-models) | Cooling and heating with a signed spectral shift for a nearby source | `peakT` | 10⁻¹⁴ solar masses per year per square parsec |
 
 Temperatures are in keV. The lowercase functions evaluate spectra directly
@@ -147,6 +147,17 @@ weighting the emission measure by the inverse bolometric emissivity. The
 cooling-plus-heating models take `peakT` (default 2.2 keV) and integrate from
 0.01 to 50 keV. The temperature integral uses 10 logarithmic samples by default.
 Set `ntemps` to change the sample count, analogous to XSPEC's `CFLOW_NTEMPS`.
+
+All `Coolflow` and `LocalCoolflow` variants accept a dimensionless `slope`.
+It multiplies each temperature's emission measure by `(T / Tpivot)^slope`,
+where `Tpivot = 10⁷ K ≈ 0.862 keV`. Positive slopes favor hotter gas relative
+to cooler gas. The default `slope=0.0` gives ordinary isobaric cooling flow.
+Numeric slopes are frozen in SpectralFitting. Use `slope=FitParam(0.5)` to
+fit the slope.
+
+The weighting follows XSPEC's [`cflow` model](https://heasarc.gsfc.nasa.gov/docs/software/xspec/manual/XSmodelCflow.html).
+Plasma.jl uses AtomDB for both the spectra and the bolometric emissivity.
+XSPEC's legacy `cflow` uses a Raymond–Smith table.
 
 The cooling-plus-heating models follow the effective XSPEC 12.15 heating
 prescription. At `peakT ≥ 1` keV the heating term uses a 1 keV emissivity

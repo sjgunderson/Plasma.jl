@@ -24,6 +24,7 @@ for (variants, supertype, temperature_parameters, cooling_options) in (
         @eval struct $model{T} <: $supertype{T}
             db::AtomDB
             options::ApecOptions
+            cache::Union{Nothing,SpectrumCache}
             cooling::$cooling_options
             $(fields...)
         end
@@ -58,11 +59,12 @@ for (_, constructor, model, mode, broadened) in COOLFLOW_VARIANTS
             cosmology::CoolingCosmology = CoolingCosmology(), distance_mpc::Union{Nothing,Real} = nothing,
             normalization_redshift::Union{Nothing,Real} = nothing, bolometric::Symbol = :xspec,
             abundance_table = :angr, trace_abundance = 1.0, thermal_broadening::Bool = $broadened,
-            elements...)
+            cache_spectra::Bool = true, elements...)
         options = dem_options(abundance_table, trace_abundance, thermal_broadening, 1.0, switch)
+        cache = spectrum_cache(cache_spectra, Val($(QuoteNode(mode))), options, DEM_INDEX)
         settings = CoolingOptions(cosmology; distance_mpc, normalization_redshift, ntemps, bolometric)
         tail = fit_cooling_tail(Val($(QuoteNode(mode))), elements, redshift, velocity, $broadened, settings)
-        return $model(db, options, settings, fit_parameter(K, 0.0, 1e24, false),
+        return $model(db, options, cache, settings, fit_parameter(K, 0.0, 1e24, false),
             fit_parameter(lowT, 0.0808, 79.9, false), fit_parameter(highT, 0.0808, 79.9, false), tail...,
             fit_parameter(slope, -5.0, 5.0, true))
     end
@@ -74,11 +76,12 @@ for (_, constructor, model, mode, broadened) in CPH_VARIANTS
             cosmology::CoolingCosmology = CoolingCosmology(), distance_mpc::Union{Nothing,Real} = nothing,
             normalization_redshift::Union{Nothing,Real} = nothing, bolometric::Symbol = :xspec,
             abundance_table = :angr, trace_abundance = 1.0, thermal_broadening::Bool = $broadened,
-            elements...)
+            cache_spectra::Bool = true, elements...)
         options = dem_options(abundance_table, trace_abundance, thermal_broadening, 1.0, switch)
+        cache = spectrum_cache(cache_spectra, Val($(QuoteNode(mode))), options, DEM_INDEX)
         settings = CoolingOptions(cosmology; distance_mpc, normalization_redshift, ntemps, bolometric)
         tail = fit_cooling_tail(Val($(QuoteNode(mode))), elements, redshift, velocity, $broadened, settings)
-        return $model(db, options, settings, fit_parameter(K, 0.0, 1e24, false),
+        return $model(db, options, cache, settings, fit_parameter(K, 0.0, 1e24, false),
             fit_parameter(peakT, 0.1, 100.0, false), tail...)
     end
 end
@@ -87,11 +90,12 @@ for (_, constructor, model, mode, broadened) in LOCAL_COOLFLOW_VARIANTS
     @eval function $constructor(db::AtomDB; K = 1.0, lowT = 0.1, highT = 4.0, slope = 0.0,
             redshift = 0.0, velocity = nothing, switch::Integer = 2, ntemps::Integer = COOLING_NTEMPS,
             bolometric::Symbol = :xspec, abundance_table = :angr, trace_abundance = 1.0,
-            thermal_broadening::Bool = $broadened, elements...)
+            thermal_broadening::Bool = $broadened, cache_spectra::Bool = true, elements...)
         options = dem_options(abundance_table, trace_abundance, thermal_broadening, 1.0, switch)
+        cache = spectrum_cache(cache_spectra, Val($(QuoteNode(mode))), options, DEM_INDEX)
         settings = LocalCoolingOptions(ntemps, bolometric)
         tail = fit_cooling_tail(Val($(QuoteNode(mode))), elements, redshift, velocity, $broadened, settings)
-        return $model(db, options, settings, fit_parameter(K, 0.0, 1e24, false),
+        return $model(db, options, cache, settings, fit_parameter(K, 0.0, 1e24, false),
             fit_parameter(lowT, 0.0808, 79.9, false), fit_parameter(highT, 0.0808, 79.9, false), tail...,
             fit_parameter(slope, -5.0, 5.0, true))
     end
@@ -101,11 +105,12 @@ for (_, constructor, model, mode, broadened) in LOCAL_CPH_VARIANTS
     @eval function $constructor(db::AtomDB; K = 1.0, peakT = 2.2, redshift = 0.0,
             velocity = nothing, switch::Integer = 2, ntemps::Integer = COOLING_NTEMPS,
             bolometric::Symbol = :xspec, abundance_table = :angr, trace_abundance = 1.0,
-            thermal_broadening::Bool = $broadened, elements...)
+            thermal_broadening::Bool = $broadened, cache_spectra::Bool = true, elements...)
         options = dem_options(abundance_table, trace_abundance, thermal_broadening, 1.0, switch)
+        cache = spectrum_cache(cache_spectra, Val($(QuoteNode(mode))), options, DEM_INDEX)
         settings = LocalCoolingOptions(ntemps, bolometric)
         tail = fit_cooling_tail(Val($(QuoteNode(mode))), elements, redshift, velocity, $broadened, settings)
-        return $model(db, options, settings, fit_parameter(K, 0.0, 1e24, false),
+        return $model(db, options, cache, settings, fit_parameter(K, 0.0, 1e24, false),
             fit_parameter(peakT, 0.1, 100.0, false), tail...)
     end
 end
@@ -125,5 +130,5 @@ function SpectralFitting.invoke!(output, edges, model::AbstractCoolingModel)
     z_norm = cooling_norm_redshift(model.cooling, model.redshift)
     weights = model_cooling_weights(model, abundances, z_norm)
     return evaluate_cie!(output, edges, model.db, abundances, model.options, weights;
-        redshift = model.redshift, normalization_redshift = z_norm, velocity = model_velocity(model))
+        redshift = model.redshift, normalization_redshift = z_norm, velocity = model_velocity(model), cache = model.cache)
 end

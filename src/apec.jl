@@ -84,7 +84,7 @@ function evaluate_cie(edges, db, abundances, options, emission;
 end
 
 function evaluate_cie!(output::AbstractVector, edges::AbstractVector, db, abundances, options, emission;
-        redshift, normalization_redshift = redshift, norm = 1.0, velocity)
+        redshift, normalization_redshift = redshift, norm = 1.0, velocity, cache = nothing)
     Base.require_one_based_indexing(output, edges)
     length(edges) >= 2 || throw(ArgumentError("At least two energy edges are required"))
     length(output) == length(edges) - 1 ||
@@ -102,20 +102,27 @@ function evaluate_cie!(output::AbstractVector, edges::AbstractVector, db, abunda
         throw(DomainError(velocity, "Velocity broadening must be nonnegative and finite"))
     end
 
-    z1 = 1.0 + redshift
-    source_edges = edges .* z1
+    if !add_cached_emission!(output, edges, db, abundances, options, emission, redshift, velocity, cache)
+        source_edges, centers, widths = source_grid(edges, redshift)
+        scales = abundance_scales(abundances, options)
+        fill!(output, zero(eltype(output)))
+        add_emission!(output, source_edges, centers, widths, db, emission, scales, options.thermal, velocity)
+    end
+    output .*= 1.0e14 * norm / (1.0 + normalization_redshift)
+    return output
+end
+
+abundance_scales(abundances, options) = map(*, promote(abundances...), options.ratios)
+
+function source_grid(edges, redshift)
+    source_edges = edges .* (1.0 + redshift)
     if !all(x -> isfinite(x) && x >= 0, source_edges) ||
             !all(i -> source_edges[i] > source_edges[i - 1], 2:length(source_edges))
         throw(ArgumentError("Energy edges must be finite, nonnegative, and strictly increasing in the source frame"))
     end
     widths = diff(source_edges)
-    centers = [source_edges[i] + widths[i] / 2 for i in eachindex(output)]
-    fill!(output, zero(eltype(output)))
-    scales = map(*, promote(abundances...), options.ratios)
-
-    add_emission!(output, source_edges, centers, widths, db, emission, scales, options.thermal, velocity)
-    output .*= 1.0e14 * norm / (1.0 + normalization_redshift)
-    return output
+    centers = [source_edges[i] + widths[i] / 2 for i in eachindex(widths)]
+    return source_edges, centers, widths
 end
 
 function temperature_bracket(temperatures, kT)
@@ -129,11 +136,16 @@ function temperature_bracket(temperatures, kT)
     return lower, upper, fraction
 end
 
-function add_emission!(output, edges, centers, widths, db, kT::Real, scales, thermal, velocity)
+function emission_bracket(db, kT)
     if !(0 < kT && isfinite(kT))
         throw(DomainError(kT, "Plasma temperature must be positive and finite"))
     end
-    lower, upper, fraction = temperature_bracket(db.temperatures, kT)
+    return temperature_bracket(db.temperatures, kT)
+end
+
+function add_emission!(output, edges, centers, widths, db, kT::Real, scales, thermal, velocity)
+    lower, upper, fraction = emission_bracket(db, kT)
+    load_temperature_slices!(db, (lower, upper))
     add_slice!(output, edges, centers, widths, db, lower, scales, 1 - fraction, thermal, velocity)
     if lower != upper
         add_slice!(output, edges, centers, widths, db, upper, scales, fraction, thermal, velocity)
@@ -142,6 +154,14 @@ function add_emission!(output, edges, centers, widths, db, kT::Real, scales, the
 end
 
 function add_emission!(output, edges, centers, widths, db, weights::AbstractVector, scales, thermal, velocity)
+    load_temperature_slices!(db, (i for i in eachindex(weights) if !iszero(weights[i])))
+    if Threads.nthreads() > 1 && (thermal || !iszero(velocity))
+        indices = findall(weight -> !iszero(weight), weights)
+        if length(indices) >= 4
+            return add_threaded_emission!(output, edges, centers, widths, db, weights, indices,
+                scales, thermal, velocity)
+        end
+    end
     for index in eachindex(weights)
         weight = weights[index]
         iszero(weight) && continue
@@ -150,19 +170,55 @@ function add_emission!(output, edges, centers, widths, db, weights::AbstractVect
     return nothing
 end
 
-function add_slice!(output, edges, centers, widths, db, index, scales, weight, thermal, velocity)
+function add_slice!(output, edges, centers, widths, db, index, scales, weight, thermal, velocity, columns = nothing)
     slice = temperature_slice(db, index)
+    return add_slice!(output, edges, centers, widths, slice, db.temperatures[index],
+        scales, weight, thermal, velocity, columns)
+end
+
+function add_slice!(output, edges, centers, widths, slice::TemperatureSlice, temperature,
+        scales, weight, thermal, velocity, columns)
+    coefficients = map(scale -> weight * scale, scales)
     for (z, continuum) in slice.continua
-        add_continuum!(output, centers, widths, continuum, weight * scales[z])
+        bins = spectrum_column(output, columns, z)
+        add_continuum!(bins, centers, widths, continuum, coefficients[z])
     end
     if thermal || !iszero(velocity)
-        fractions = line_width_fractions(db.temperatures[index], thermal, velocity)
-        add_broadened_lines!(output, edges, slice.lines, scales, weight, fractions)
+        fractions = line_width_fractions(temperature, thermal, velocity)
+        add_broadened_lines!(output, edges, slice.lines, coefficients, fractions, columns)
     else
-        add_lines!(output, edges, slice.lines, scales, weight)
+        add_lines!(output, edges, slice.lines, coefficients, columns)
     end
     return nothing
 end
+
+function add_threaded_emission!(output, edges, centers, widths, db, weights, indices,
+        scales, thermal, velocity)
+    # Each chunk writes to its own output and the caller reduces in chunk order.
+    count = length(indices)
+    workers = min(Threads.nthreads(), count)
+    buffers = [zeros(eltype(output), length(output)) for _ in 1:workers]
+    slices = map(i -> temperature_slice(db, i), indices)
+    Threads.@threads for worker in 1:workers
+        start = fld((worker - 1) * count, workers) + 1
+        stop = fld(worker * count, workers)
+        bins = buffers[worker]
+        for i in start:stop
+            index = indices[i]
+            add_slice!(bins, edges, centers, widths, slices[i], db.temperatures[index],
+                scales, weights[index], thermal, velocity, nothing)
+        end
+    end
+    for bins in buffers
+        output .+= bins
+    end
+    return nothing
+end
+
+spectrum_column(output, ::Nothing, _z) = output
+spectrum_column(output, columns, z) = view(output, :, columns[z])
+spectrum_column_index(::Nothing, _z) = 1
+spectrum_column_index(columns, z) = columns[z]
 
 function add_continuum!(output, centers, widths, continuum, weight)
     energies, density = continuum.energies, continuum.density
@@ -190,7 +246,7 @@ function add_continuum!(output, centers, widths, continuum, weight)
     return nothing
 end
 
-function add_lines!(output, edges, lines, scales, weight)
+function add_lines!(output, edges, lines, coefficients, columns)
     energies, emissivities = lines.energies, lines.emissivities
     firstline = searchsortedfirst(energies, first(edges))
     lastline = searchsortedlast(energies, last(edges))
@@ -198,10 +254,11 @@ function add_lines!(output, edges, lines, scales, weight)
     i = max(1, searchsortedfirst(edges, energies[firstline]) - 1)
     @inbounds for j in firstline:lastline
         # XSPEC's line histogram assigns a line on an internal edge to the lower bin.
-        while i < length(output) && energies[j] > edges[i + 1]
+        while i < size(output, 1) && energies[j] > edges[i + 1]
             i += 1
         end
-        output[i] += weight * scales[lines.elements[j]] * emissivities[j]
+        z = lines.elements[j]
+        output[i, spectrum_column_index(columns, z)] += coefficients[z] * emissivities[j]
     end
     return nothing
 end

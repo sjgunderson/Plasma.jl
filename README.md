@@ -53,6 +53,18 @@ bounds or to thaw a parameter. The adapter supports SpectralFitting 0.7.3 and
 0.7.4. The models use FITSIO.jl to read the tables and run without an XSPEC
 runtime dependency.
 
+Fit-ready models cache AtomDB spectra on the current energy grid once the grid,
+redshift, and velocity repeat. Temperature weights and normalization are still
+evaluated at each trial. Free abundances use separate contributions for the
+affected elements or tied abundance groups. The cache retains up to 64 MiB of
+spectral templates per component, and trials with active redshift or velocity
+derivatives use direct synthesis. With multiple Julia threads, direct synthesis
+can split broadened models across temperature nodes.
+
+Use `cache_spectra=false` on a fit-ready model to compare with direct synthesis.
+The [fit-grid cache notebook](benchmarks/fit_grid_cache.ipynb) checks spectrum
+and gradient agreement and measures warm objective and gradient times.
+
 ## APEC variants and abundance tables
 
 | XSPEC | Julia spectrum | SpectralFitting model | Abundance parameters |

@@ -16,7 +16,7 @@ function line_width_fractions(kT, thermal, velocity)
     return map(mass -> sqrt(thermal_scale / mass + turbulent), ATOMIC_MASSES)
 end
 
-function add_broadened_lines!(output, edges, lines, scales, weight, fractions)
+function add_broadened_lines!(output, edges, lines, coefficients, fractions, columns)
     energies = lines.energies
     radius_fraction = GAUSSIAN_SIGMAS * maximum(fractions)
     first_line = searchsortedfirst(energies, first(edges) / (1 + radius_fraction))
@@ -26,23 +26,24 @@ function add_broadened_lines!(output, edges, lines, scales, weight, fractions)
         center = energies[j]
         z = lines.elements[j]
         sigma = center * fractions[z]
-        strength = weight * scales[z] * lines.emissivities[j]
+        column = spectrum_column_index(columns, z)
+        strength = coefficients[z] * lines.emissivities[j]
         if iszero(sigma)
             if first(edges) <= center <= last(edges)
                 i = max(1, searchsortedfirst(edges, center) - 1)
-                output[i] += strength
+                output[i, column] += strength
             end
             continue
         end
         radius = GAUSSIAN_SIGMAS * sigma
         first_bin = max(1, searchsortedlast(edges, center - radius))
-        last_bin = min(length(output), searchsortedfirst(edges, center + radius) - 1)
+        last_bin = min(size(output, 1), searchsortedfirst(edges, center + radius) - 1)
         first_bin > last_bin && continue
         scale = inv(sqrt(2) * sigma)
         previous = erf((edges[first_bin] - center) * scale)
         for i in first_bin:last_bin
             current = erf((edges[i + 1] - center) * scale)
-            output[i] += (current - previous) / 2 * strength
+            output[i, column] += (current - previous) / 2 * strength
             previous = current
         end
     end

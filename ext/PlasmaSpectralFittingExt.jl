@@ -1,9 +1,10 @@
 module PlasmaSpectralFittingExt
 
 using Plasma: AtomDB, ApecOptions, ELEMENT_NAMES, VAPEC_NAMES, apec_options,
-    element_parameters, evaluate_apec!, tied_abundances, partial_abundances, line_search_temperature
+    element_parameters, evaluate_cie!, tied_abundances, partial_abundances, line_search_temperature,
+    SpectrumCache, spectrum_cache, VAPEC_INDEX, DEM_INDEX
 import Plasma: Apec, Bapec, Vapec, Vvapec, Bvapec, Bvvapec
-import Plasma: line_model_state
+import Plasma: line_model_state, cache_value, cache_constant
 using SpectralFitting: AbstractSpectralModel, Additive, FitParam
 import SpectralFitting
 
@@ -25,48 +26,61 @@ for (name, abundance_names, broadened) in (
     @eval struct $name{T} <: AbstractApecModel{T}
         db::AtomDB
         options::ApecOptions
+        cache::Union{Nothing,SpectrumCache}
         $(fields...)
     end
 end
 
 function Apec(db::AtomDB; K = 1.0, kT = 1.0, abundance = 1.0, redshift = 0.0,
-        abundance_table = :angr, trace_abundance = 1.0, thermal_broadening::Bool = false)
+        abundance_table = :angr, trace_abundance = 1.0, thermal_broadening::Bool = false,
+        cache_spectra::Bool = true)
     options = apec_options(abundance_table, trace_abundance, thermal_broadening)
-    return ApecModel(db, options, common_parameters(K, kT, (0.008, 64.0))...,
+    cache = spectrum_cache(cache_spectra, Val(:tied), options, VAPEC_INDEX)
+    return ApecModel(db, options, cache, common_parameters(K, kT, (0.008, 64.0))...,
         fit_parameter(abundance, 0.0, 5.0, true), fit_parameter(redshift, -0.999, 10.0, true))
 end
 
 function Bapec(db::AtomDB; K = 1.0, kT = 1.0, abundance = 1.0, redshift = 0.0, velocity = 0.0,
-        abundance_table = :angr, trace_abundance = 1.0, thermal_broadening::Bool = true)
+        abundance_table = :angr, trace_abundance = 1.0, thermal_broadening::Bool = true,
+        cache_spectra::Bool = true)
     options = apec_options(abundance_table, trace_abundance, thermal_broadening)
-    return BapecModel(db, options, common_parameters(K, kT, (0.008, 64.0))...,
+    cache = spectrum_cache(cache_spectra, Val(:tied), options, VAPEC_INDEX)
+    return BapecModel(db, options, cache, common_parameters(K, kT, (0.008, 64.0))...,
         fit_parameter(abundance, 0.0, 5.0, true), fit_parameter(redshift, -0.999, 10.0, true),
         fit_parameter(velocity, 0.0, 1e6, true))
 end
 
 function Vapec(db::AtomDB; K = 1.0, kT = 6.5, redshift = 0.0, abundance_table = :angr,
-        trace_abundance = 1.0, thermal_broadening::Bool = false, elements...)
+        trace_abundance = 1.0, thermal_broadening::Bool = false,
+        cache_spectra::Bool = true, elements...)
     options = apec_options(abundance_table, trace_abundance, thermal_broadening)
-    return VapecModel(db, options, variable_parameters(K, kT, redshift, elements, VAPEC_NAMES)...)
+    cache = spectrum_cache(cache_spectra, Val(:partial), options, VAPEC_INDEX)
+    return VapecModel(db, options, cache, variable_parameters(K, kT, redshift, elements, VAPEC_NAMES)...)
 end
 
 function Vvapec(db::AtomDB; K = 1.0, kT = 6.5, redshift = 0.0, abundance_table = :angr,
-        thermal_broadening::Bool = false, elements...)
+        thermal_broadening::Bool = false,
+        cache_spectra::Bool = true, elements...)
     options = apec_options(abundance_table, 1.0, thermal_broadening)
-    return VvapecModel(db, options, variable_parameters(K, kT, redshift, elements, VVAPEC_PARAMETER_NAMES)...)
+    cache = spectrum_cache(cache_spectra, Val(:full), options, VAPEC_INDEX)
+    return VvapecModel(db, options, cache, variable_parameters(K, kT, redshift, elements, VVAPEC_PARAMETER_NAMES)...)
 end
 
 function Bvapec(db::AtomDB; K = 1.0, kT = 6.5, redshift = 0.0, velocity = 0.0,
-        abundance_table = :angr, trace_abundance = 1.0, thermal_broadening::Bool = true, elements...)
+        abundance_table = :angr, trace_abundance = 1.0, thermal_broadening::Bool = true,
+        cache_spectra::Bool = true, elements...)
     options = apec_options(abundance_table, trace_abundance, thermal_broadening)
-    return BvapecModel(db, options, variable_parameters(K, kT, redshift, elements, VAPEC_NAMES)...,
+    cache = spectrum_cache(cache_spectra, Val(:partial), options, VAPEC_INDEX)
+    return BvapecModel(db, options, cache, variable_parameters(K, kT, redshift, elements, VAPEC_NAMES)...,
         fit_parameter(velocity, 0.0, 1e6, true))
 end
 
 function Bvvapec(db::AtomDB; K = 1.0, kT = 6.5, redshift = 0.0, velocity = 0.0,
-        abundance_table = :angr, thermal_broadening::Bool = true, elements...)
+        abundance_table = :angr, thermal_broadening::Bool = true,
+        cache_spectra::Bool = true, elements...)
     options = apec_options(abundance_table, 1.0, thermal_broadening)
-    return BvvapecModel(db, options, variable_parameters(K, kT, redshift, elements, VVAPEC_PARAMETER_NAMES)...,
+    cache = spectrum_cache(cache_spectra, Val(:full), options, VAPEC_INDEX)
+    return BvvapecModel(db, options, cache, variable_parameters(K, kT, redshift, elements, VVAPEC_PARAMETER_NAMES)...,
         fit_parameter(velocity, 0.0, 1e6, true))
 end
 
@@ -110,10 +124,17 @@ end
 
 Base.copy(model::AbstractCIEModel{<:Number}) = model
 
+const FD = SpectralFitting.ForwardDiff
+cache_value(x::FD.Dual) = cache_value(FD.value(x))
+function cache_constant(x::FD.Dual)
+    all(partial -> cache_constant(partial) == 0.0, FD.partials(x)) || return nothing
+    return cache_constant(FD.value(x))
+end
+
 function SpectralFitting.invoke!(output, edges, model::AbstractApecModel)
     # SpectralFitting applies K when invoking an additive model.
-    return evaluate_apec!(output, edges, model.db, model_abundances(model), model.options;
-        kT = model.kT, redshift = model.redshift, velocity = model_velocity(model))
+    return evaluate_cie!(output, edges, model.db, model_abundances(model), model.options, model.kT;
+        redshift = model.redshift, velocity = model_velocity(model), cache = model.cache)
 end
 
 include("dem.jl")

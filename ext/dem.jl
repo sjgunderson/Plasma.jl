@@ -1,5 +1,5 @@
 using Plasma: WDEM_VARIANTS, CEMPOW_VARIANTS, dem_options, dem_abundance_names, dem_abundances,
-    dem_node_weights, wdem_sampling, cempow_sampling, evaluate_cie!
+    dem_node_weights, wdem_sampling, cempow_sampling
 import Plasma: Wdem, Vwdem, Vvwdem, Bwdem, Bvwdem, Bvvwdem, Cempow, Vcempow, Bcempow, Bvcempow
 
 abstract type AbstractDemModel{T} <: AbstractCIEModel{T} end
@@ -22,6 +22,7 @@ for (variants, supertype, temperature_parameters) in (
         @eval struct $model{T} <: $supertype{T}
             db::AtomDB
             options::ApecOptions
+            cache::Union{Nothing,SpectrumCache}
             $(fields...)
         end
         @eval function model_abundances(model::$model)
@@ -46,13 +47,14 @@ for (_, constructor, model, mode, broadened) in WDEM_VARIANTS
     @eval function $constructor(db::AtomDB; K = 1.0, Tmax = 1.0, beta = 0.1, inv_slope = 0.25,
             redshift = 0.0, velocity = nothing, nH::Real = 1.0, switch::Integer = 2,
             abundance_table = :angr, trace_abundance = 1.0, thermal_broadening::Bool = $broadened,
-            elements...)
+            cache_spectra::Bool = true, elements...)
         if !$broadened && !isnothing(velocity)
             throw(ArgumentError("Use a broadened Wdem model to fit velocity"))
         end
         options = dem_options(abundance_table, trace_abundance, thermal_broadening, nH, switch)
+        cache = spectrum_cache(cache_spectra, Val($(QuoteNode(mode))), options, DEM_INDEX)
         tail = fit_dem_tail(Val($(QuoteNode(mode))), elements, redshift, $broadened ? something(velocity, 0.0) : nothing)
-        return $model(db, options, common_parameters(K, Tmax, (0.01, 20.0))...,
+        return $model(db, options, cache, common_parameters(K, Tmax, (0.01, 20.0))...,
             fit_parameter(beta, 0.01, 1.0, false), fit_parameter(inv_slope, -1.0, 10.0, false), tail...)
     end
 end
@@ -61,13 +63,14 @@ for (_, constructor, model, mode, broadened) in CEMPOW_VARIANTS
     @eval function $constructor(db::AtomDB; K = 1.0, alpha = 1.0, Tmax = 1.0,
             redshift = 0.0, velocity = nothing, nH::Real = 1.0, switch::Integer = 2,
             abundance_table = :angr, trace_abundance = 1.0, thermal_broadening::Bool = $broadened,
-            elements...)
+            cache_spectra::Bool = true, elements...)
         if !$broadened && !isnothing(velocity)
             throw(ArgumentError("Use a broadened Cempow model to fit velocity"))
         end
         options = dem_options(abundance_table, trace_abundance, thermal_broadening, nH, switch)
+        cache = spectrum_cache(cache_spectra, Val($(QuoteNode(mode))), options, DEM_INDEX)
         tail = fit_dem_tail(Val($(QuoteNode(mode))), elements, redshift, $broadened ? something(velocity, 0.0) : nothing)
-        return $model(db, options, fit_parameter(K, 0.0, 1e24, false), fit_parameter(alpha, 0.01, 20.0, true),
+        return $model(db, options, cache, fit_parameter(K, 0.0, 1e24, false), fit_parameter(alpha, 0.01, 20.0, true),
             fit_parameter(Tmax, 0.02725, 100.0, false), tail...)
     end
 end
@@ -78,5 +81,5 @@ dem_sampling(model::AbstractCempowModel) = cempow_sampling(model.alpha, model.Tm
 function SpectralFitting.invoke!(output, edges, model::AbstractDemModel)
     weights = dem_node_weights(model.db, dem_sampling(model))
     return evaluate_cie!(output, edges, model.db, model_abundances(model), model.options, weights;
-        redshift = model.redshift, velocity = model_velocity(model))
+        redshift = model.redshift, velocity = model_velocity(model), cache = model.cache)
 end

@@ -92,20 +92,24 @@ end
 
 function read_lines(path, index)
     return FITS(path, "r") do fits
-        hdu = fits["EMISSIVITY", index]
-        wavelength = read(hdu, "Lambda"; case_sensitive = false)
-        emissivities = read(hdu, "Epsilon"; case_sensitive = false)
-        elements = read(hdu, "Element"; case_sensitive = false)
-        if !all(x -> isfinite(x) && x > 0, wavelength) ||
-                !all(f -> isfinite(f) && f >= 0, emissivities) ||
-                !all(z -> 1 <= z <= 30, elements)
-            throw(ArgumentError("Invalid CIE line record at temperature index $index in $path"))
-        end
-
-        energies = KEV_ANGSTROM ./ wavelength
-        order = sortperm(energies)
-        return Lines(energies[order], Float32.(emissivities[order]), UInt8.(elements[order]))
+        read_lines(fits, path, index)
     end
+end
+
+function read_lines(fits, path, index)
+    hdu = fits["EMISSIVITY", index]
+    wavelength = read(hdu, "Lambda"; case_sensitive = false)
+    emissivities = read(hdu, "Epsilon"; case_sensitive = false)
+    elements = read(hdu, "Element"; case_sensitive = false)
+    if !all(x -> isfinite(x) && x > 0, wavelength) ||
+            !all(f -> isfinite(f) && f >= 0, emissivities) ||
+            !all(z -> 1 <= z <= 30, elements)
+        throw(ArgumentError("Invalid CIE line record at temperature index $index in $path"))
+    end
+
+    energies = KEV_ANGSTROM ./ wavelength
+    order = sortperm(energies)
+    return Lines(energies[order], Float32.(emissivities[order]), UInt8.(elements[order]))
 end
 
 # FITSIO returns a vector of row vectors for variable-length columns, and
@@ -113,41 +117,39 @@ end
 continuum_rows(column::AbstractVector{<:AbstractVector}, _nrows) = column
 continuum_rows(column::AbstractArray{<:Real}, nrows) = eachcol(reshape(column, :, nrows))
 
-function read_continua(path, index)
-    return FITS(path, "r") do fits
-        hdu = fits["EMISSIVITY", index]
-        elements = read(hdu, "Z"; case_sensitive = false)
-        ions = read(hdu, "rmJ"; case_sensitive = false)
-        if !all(iszero, ions) || !all(z -> 1 <= z <= 30, elements) || !allunique(elements)
-            throw(ArgumentError("Expected one CIE continuum row per element at temperature index $index in $path"))
-        end
-        continua = Tuple{Int,Continuum}[]
-        isempty(elements) && return continua
-        for (count_column, energy_column, density_column) in (
-                ("N_Cont", "E_Cont", "Continuum"), ("N_Pseudo", "E_Pseudo", "Pseudo"))
-            counts = read(hdu, count_column; case_sensitive = false)
-            energies = continuum_rows(read(hdu, energy_column; case_sensitive = false), length(elements))
-            densities = continuum_rows(read(hdu, density_column; case_sensitive = false), length(elements))
-            for i in eachindex(elements)
-                n = counts[i]
-                energy_row, density_row = energies[i], densities[i]
-                if !(0 <= n <= length(energy_row) && n <= length(density_row))
-                    throw(ArgumentError("Invalid $count_column for Z=$(elements[i]) at temperature index $index in $path: " *
-                        "declared $n points, found $(length(energy_row)) energies and $(length(density_row)) emissivities"))
-                end
-                iszero(n) && continue
-                e = Vector{Float32}(view(energy_row, 1:n))
-                f = Vector{Float32}(view(density_row, 1:n))
-                if !all(x -> isfinite(x) && x > 0, e) ||
-                        !all(j -> e[j] > e[j - 1], 2:length(e)) ||
-                        !all(x -> isfinite(x) && x >= 0, f)
-                    throw(ArgumentError("Invalid $density_column data at temperature index $index in $path"))
-                end
-                push!(continua, (Int(elements[i]), Continuum(e, f)))
-            end
-        end
-        return continua
+function read_continua(fits, path, index)
+    hdu = fits["EMISSIVITY", index]
+    elements = read(hdu, "Z"; case_sensitive = false)
+    ions = read(hdu, "rmJ"; case_sensitive = false)
+    if !all(iszero, ions) || !all(z -> 1 <= z <= 30, elements) || !allunique(elements)
+        throw(ArgumentError("Expected one CIE continuum row per element at temperature index $index in $path"))
     end
+    continua = Tuple{Int,Continuum}[]
+    isempty(elements) && return continua
+    for (count_column, energy_column, density_column) in (
+            ("N_Cont", "E_Cont", "Continuum"), ("N_Pseudo", "E_Pseudo", "Pseudo"))
+        counts = read(hdu, count_column; case_sensitive = false)
+        energies = continuum_rows(read(hdu, energy_column; case_sensitive = false), length(elements))
+        densities = continuum_rows(read(hdu, density_column; case_sensitive = false), length(elements))
+        for i in eachindex(elements)
+            n = counts[i]
+            energy_row, density_row = energies[i], densities[i]
+            if !(0 <= n <= length(energy_row) && n <= length(density_row))
+                throw(ArgumentError("Invalid $count_column for Z=$(elements[i]) at temperature index $index in $path: " *
+                    "declared $n points, found $(length(energy_row)) energies and $(length(density_row)) emissivities"))
+            end
+            iszero(n) && continue
+            e = Vector{Float32}(view(energy_row, 1:n))
+            f = Vector{Float32}(view(density_row, 1:n))
+            if !all(x -> isfinite(x) && x > 0, e) ||
+                    !all(j -> e[j] > e[j - 1], 2:length(e)) ||
+                    !all(x -> isfinite(x) && x >= 0, f)
+                throw(ArgumentError("Invalid $density_column data at temperature index $index in $path"))
+            end
+            push!(continua, (Int(elements[i]), Continuum(e, f)))
+        end
+    end
+    return continua
 end
 
 function temperature_lines(db::AtomDB, index::Int)
@@ -165,11 +167,30 @@ function temperature_slice(db::AtomDB, index::Int)
     return lock(db.cache_lock) do
         slice = db.slices[index]
         if isnothing(slice)
-            lines = temperature_lines(db, index)
-            continua = read_continua(db.cocofile, index)
-            slice = TemperatureSlice(continua, lines)
-            db.slices[index] = slice
+            load_temperature_slices!(db, (index,))
+            slice = db.slices[index]
         end
-        return slice
+        return slice::TemperatureSlice
+    end
+end
+
+function load_temperature_slices!(db, indices)
+    return lock(db.cache_lock) do
+        any(i -> isnothing(db.slices[i]), indices) || return nothing
+        FITS(db.linefile, "r") do linefile
+            FITS(db.cocofile, "r") do cocofile
+                for i in indices
+                    isnothing(db.slices[i]) || continue
+                    lines = db.line_lists[i]
+                    if isnothing(lines)
+                        lines = read_lines(linefile, db.linefile, i)
+                        db.line_lists[i] = lines
+                    end
+                    continua = read_continua(cocofile, db.cocofile, i)
+                    db.slices[i] = TemperatureSlice(continua, lines)
+                end
+            end
+        end
+        return nothing
     end
 end

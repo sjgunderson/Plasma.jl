@@ -2,6 +2,69 @@ using Plasma, SpectralFitting, Test
 
 include("fixtures.jl")
 
+function trial_flux(model, edges, names, x)
+    parameters = [zero(eltype(x)) + SpectralFitting.get_value(p) for p in SpectralFitting.parameter_vector(model)]
+    model_names = SpectralFitting.parameter_names(model)
+    for (name, value) in zip(names, x)
+        parameters[findfirst(==(name), model_names)] = value
+    end
+    bins = zeros(eltype(x), length(edges) - 1, 1)
+    return vec(SpectralFitting.invokemodel!(bins, edges, model, parameters))
+end
+
+@testset "Fit-grid cache" begin
+    mktempdir() do dir
+        db = AtomDB(write_test_apec(joinpath(dir, "fit_grid")))
+        edge_grid = collect(range(1.0, 13.0; length = 401))
+        names = (:K, :Tmax, :beta, :inv_slope, :abundance)
+        x = [0.5, 2.7, 0.5, 0.25, 0.4]
+        cached = Wdem(db)
+        direct = Wdem(db; cache_spectra = false)
+
+        for _ in 1:3
+            @test trial_flux(cached, edge_grid, names, x) ≈ trial_flux(direct, edge_grid, names, x)
+        end
+        @test cached.cache.grid.basis.count == 2
+        templates = cached.cache.grid.basis.spectra
+        @test trial_flux(cached, edge_grid, names, x .* [2, 1, 1, 1, 1]) ≈
+            2 .* trial_flux(direct, edge_grid, names, x)
+        @test cached.cache.grid.basis.spectra === templates
+
+        fd = SpectralFitting.ForwardDiff
+        for trial in (x, [0.4, 2.5, 0.45, 0.35, 0.0])
+            expected = fd.jacobian(p -> trial_flux(direct, edge_grid, names, p), trial)
+            actual = fd.jacobian(p -> trial_flux(cached, edge_grid, names, p), trial)
+            @test isapprox(actual, expected; rtol = 1e-11)
+        end
+        @test length(cached.cache.grid.basis.representatives) == 1
+
+        edge_grid[100] += 0.005
+        for _ in 1:2
+            @test trial_flux(cached, edge_grid, names, x) ≈ trial_flux(direct, edge_grid, names, x)
+        end
+        @test cached.cache.grid.observed_edges == edge_grid
+
+        options = (; kT = 2.3, redshift = -0.03, velocity = 250.0, trace_abundance = :Fe, Fe = 0.4)
+        broadened = Bvapec(db; options...)
+        unprepared = Bvapec(db; options..., cache_spectra = false)
+        for _ in 1:2
+            @test invokemodel(edge_grid, broadened) ≈ invokemodel(edge_grid, unprepared)
+        end
+        @test broadened.cache.grid.basis.count == 2
+        names = (:redshift, :velocity, :Fe)
+        build_flux(model, p) = trial_flux(model, edge_grid, names, p)
+        shifted = [-0.02, 300.0, 0.7]
+        @test build_flux(broadened, shifted) ≈ build_flux(unprepared, shifted)
+        @test isapprox(fd.jacobian(p -> build_flux(broadened, p), shifted),
+            fd.jacobian(p -> build_flux(unprepared, p), shifted); rtol = 1e-11)
+        @test invokemodel(edge_grid, broadened) ≈ invokemodel(edge_grid, unprepared)
+        frozen_shape = [:Fe]
+        @test isapprox(fd.jacobian(p -> trial_flux(broadened, edge_grid, frozen_shape, p), [0.5]),
+            fd.jacobian(p -> trial_flux(unprepared, edge_grid, frozen_shape, p), [0.5]); rtol = 1e-11)
+        @test length(broadened.cache.grid.basis.representatives) == 1
+    end
+end
+
 @testset "Rank lines from a Plasma model" begin
     mktempdir() do dir
         db = AtomDB(write_test_apec(joinpath(dir, "model_lines")))

@@ -44,8 +44,7 @@ function temperature_line_ids(db::AtomDB, index::Int, lines::Lines)
                 ions = read(hdu, "Ion"; case_sensitive = false)
                 upper = read(hdu, "UpperLev"; case_sensitive = false)
                 lower = read(hdu, "LowerLev"; case_sensitive = false)
-                # Match the stable energy ordering of read_lines.
-                order = sortperm(KEV_ANGSTROM ./ wavelength)
+                _, order = ordered_line_energies(wavelength)
                 return [LineID(lines.elements[i], ions[j], upper[j], lower[j]) for (i, j) in enumerate(order)]
             end
             db.line_ids[index] = ids

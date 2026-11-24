@@ -24,3 +24,22 @@
         @test_throws ArgumentError find_lines(db, 1.0, 4.0)
     end
 end
+
+@testset "Transition IDs with rounded line energies" begin
+    mktempdir() do dir
+        shorter = nextfloat(1.5f0, 2)
+        longer = nextfloat(shorter)
+        prefix = write_test_apec(joinpath(dir, "rounded"); wavelengths = Float32[shorter, longer, 1])
+        db = AtomDB{Float32,Float32,Float32}(prefix)
+        lines = Plasma.temperature_lines(db, 1)
+        @test lines.energies[1] == lines.energies[2]
+        @test lines.elements[1:2] == [26, 1]
+
+        h = LineID(:H, 1, 2, 1)
+        fe = LineID(:Fe, 17, 5, 1)
+        rows = find_lines(db, 1.49, 1.51; kT = 1.0)
+        @test Dict(row.id => row.emissivity for row in rows) == Dict(h => 2.0, fe => 3.0)
+        @test line_emissivity(db, h, 1.0) == 2.0
+        @test line_emissivity(db, fe, 1.0) == 3.0
+    end
+end

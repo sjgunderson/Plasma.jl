@@ -112,6 +112,11 @@ function read_lines(path, index, line_type::Type{<:Lines})
     end
 end
 
+function ordered_line_energies(wavelengths)
+    energies = KEV_ANGSTROM ./ wavelengths
+    return energies, sortperm(energies)
+end
+
 function read_lines(fits, path, index, ::Type{Lines{E,F}}) where {E,F}
     hdu = fits["EMISSIVITY", index]
     wavelength = read(hdu, "Lambda"; case_sensitive = false)
@@ -123,9 +128,9 @@ function read_lines(fits, path, index, ::Type{Lines{E,F}}) where {E,F}
         throw(ArgumentError("Invalid CIE line record at temperature index $index in $path"))
     end
 
-    energies = E.(KEV_ANGSTROM ./ wavelength)
-    order = sortperm(energies)
-    return Lines{E,F}(energies[order], F.(emissivities[order]), UInt8.(elements[order]))
+    # Sort before rounding so the line records and transition IDs stay aligned.
+    energies, order = ordered_line_energies(wavelength)
+    return Lines{E,F}(E.(view(energies, order)), F.(emissivities[order]), UInt8.(elements[order]))
 end
 
 # FITSIO returns a vector of row vectors for variable-length columns, and

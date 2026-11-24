@@ -18,8 +18,13 @@
 
         @test line_emissivity(db, fe, [1.0, 2.0, 3.0]) == [3.0, 6.0, 9.0]
         @test line_emissivity(db, fe, 2.0; abundances = (Fe = 0.25,)) == 1.5
+        @test line_emissivity(db, match, [1.0, 2.0, 3.0]) == [3.0, 6.0, 9.0]
+        @test line_emissivity(db, match, 2.0; abundances = (Fe = 0.25,)) == 1.5
         h = LineID("H", 1, 2, 1)
         @test ratio_emissivity(db, fe, h, [1.0, 2.0]) == [1.5, 1.5]
+        @test ratio_emissivity(db, match, h, 1.0) == 1.5
+        @test ratio_emissivity(db, fe, rows[3], 2.0) == 1.5
+        @test ratio_emissivity(db, match, rows[3], [1.0, 2.0]) == [1.5, 1.5]
         @test isnan(ratio_emissivity(db, fe, LineID(:O, 7, 2, 1), 2.0))
         @test_throws ArgumentError find_lines(db, 1.0, 4.0)
     end

@@ -73,12 +73,13 @@ end
         @test fe.id == LineID(:Fe, 17, 5, 1)
         @test fe.emissivity == 1.5
         @test fe.wavelength ≈ 2.0
+        @test only(find_lines(model, 1.0, 4.0; element = :Fe)) == fe
 
         dem = Wdem(db; Tmax = 2.0, beta = 1.0, abundance = 0.25)
-        @test only(find_lines(db, 1.0, 4.0; model = dem, element = :Fe)).emissivity ≈ fe.emissivity
+        @test only(find_lines(dem, 1.0, 4.0; element = :Fe)).emissivity ≈ fe.emissivity
 
         cool = LocalCoolflow(db; lowT = 1.0, highT = 3.0, slope = 0.7)
-        @test !isempty(find_lines(db, 1.0, 4.0; model = cool, brightest = 1))
+        @test !isempty(find_lines(cool, 1.0, 4.0; brightest = 1))
         @test_throws ArgumentError find_lines(AtomDB(db.linefile, db.cocofile), 1.0, 4.0; model)
 
         edges = [1.0, 4.0, 8.0, 13.0]

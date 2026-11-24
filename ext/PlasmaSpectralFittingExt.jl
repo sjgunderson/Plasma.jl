@@ -4,7 +4,7 @@ using Plasma: AtomDB, ApecOptions, ELEMENT_NAMES, VAPEC_NAMES, apec_options,
     element_parameters, evaluate_cie!, tied_abundances, partial_abundances, line_search_temperature,
     SpectrumCache, spectrum_cache, VAPEC_INDEX, DEM_INDEX
 import Plasma: Apec, Bapec, Vapec, Vvapec, Bvapec, Bvvapec
-import Plasma: line_model_state, cache_value, cache_constant
+import Plasma: find_lines, line_model_state, cache_value, cache_constant
 using SpectralFitting: AbstractSpectralModel, Additive, FitParam
 import SpectralFitting
 
@@ -139,6 +139,9 @@ end
 
 include("dem.jl")
 include("cooling.jl")
+
+find_lines(model::AbstractCIEModel, lo::Real, hi::Real; options...) =
+    find_lines(model.db, lo, hi; options..., model)
 
 function line_model_state(db::AtomDB, model::AbstractCIEModel{<:FitParam})
     values = map(parameter -> parameter.value, SpectralFitting.parameter_vector(model))

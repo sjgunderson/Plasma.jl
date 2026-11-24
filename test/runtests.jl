@@ -41,9 +41,12 @@ include("fixtures.jl")
         @test_throws DomainError apec(edges, db; redshift = -1)
         @test_throws DomainError apec(edges, db; abundance = -1)
         @test_throws DomainError apec(edges, db; kT = NaN)
-        @test_throws ArgumentError AtomDB(joinpath(dir, "missing"))
+        missing_prefix = joinpath(dir, "missing")
+        @test_throws ArgumentError AtomDB(missing_prefix)
+        @test_throws ArgumentError Plasma.load(AtomDB, missing_prefix)
         mismatched = write_test_apec(joinpath(dir, "mismatched"); continuum_temperatures = Float32[1, 4])
         @test_throws ArgumentError AtomDB(mismatched)
+        @test_throws ArgumentError Plasma.load(AtomDB, mismatched * "_line.fits", mismatched * "_coco.fits")
     end
 end
 
@@ -79,6 +82,27 @@ end
                 @test eltype(slice.continua) === Tuple{Int,Plasma.Continuum{C}}
                 @test eltype(db.slices) === Union{Nothing,typeof(slice)}
                 @test apec(edges, db; kT = 2.0) ≈ reference
+            end
+        end
+    end
+end
+
+@testset "Load AtomDB by type" begin
+    mktempdir() do dir
+        edges = [1.0, 4.0, 8.0, 13.0]
+        for variable_continuum in (false, true)
+            prefix = write_test_apec(joinpath(dir, string(variable_continuum)); variable_continuum)
+            for db_type in (AtomDB, AtomDB{Float64,Float64,Float64})
+                reference = db_type(prefix)
+                expected = apec(edges, reference; kT = 2.0)
+                from_prefix = Plasma.load(db_type, prefix)
+                from_paths = Plasma.load(db_type, reference.linefile, reference.cocofile)
+                for db in (from_prefix, from_paths)
+                    @test typeof(db) === typeof(reference)
+                    @test db.temperatures == reference.temperatures
+                    @test all(isnothing, db.slices) && all(isnothing, db.line_lists)
+                    @test apec(edges, db; kT = 2.0) == expected
+                end
             end
         end
     end

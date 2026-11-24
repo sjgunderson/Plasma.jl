@@ -88,16 +88,18 @@ line_model_state(_db, _model) = throw(ArgumentError("Line ranking requires a nat
     find_lines(db, lo, hi; kT, unit=:angstrom, teunit=:keV, element=nothing,
                ion=nothing, brightest=nothing, min_emissivity=0,
                abundance_table=:angr, abundances=nothing)
+    find_lines(model, lo, hi; unit=:angstrom, element=nothing, ion=nothing,
+               brightest=nothing, min_emissivity=0)
 
 Search the loaded AtomDB CIE emissivity tables over an inclusive energy or
 wavelength interval. `unit` accepts Angstrom, nm, keV, or eV. `element` accepts
 a symbol, name such as `"Fe"`, atomic number, or a collection of these.
 `ion` accepts a spectroscopic stage or collection of stages.
 
-At a single `kT`, use Plasma.jl's temperature interpolation. Alternatively,
-supply `model` instead of `kT` to search a native SpectralFitting component
-with its current abundances and relative temperature weights. Model searches
-report intrinsic emissivities averaged over those weights in the rest frame.
+At a single `kT`, use Plasma.jl's temperature interpolation. A native
+SpectralFitting component can be passed as the first argument or as the
+`model` keyword with its database. Model searches report intrinsic rest-frame
+emissivities using the component's abundances and relative temperature weights.
 
 Return a vector of [`LineMatch`](@ref) values, ordered by wavelength unless
 `brightest` requests the top lines by emissivity.
@@ -170,10 +172,11 @@ function line_emissivity_at_node(db, id, index)
 end
 
 """
-    line_emissivity(db, id, kT; teunit=:keV, abundance_table=:angr, abundances=nothing)
+    line_emissivity(db, line, kT; teunit=:keV, abundance_table=:angr, abundances=nothing)
 
-Return the CIE emissivity of a [`LineID`](@ref) in photons cm³ s⁻¹.
-`kT` can be a scalar or a vector. Missing transitions contribute zero.
+Return the CIE emissivity of a [`LineID`](@ref) or [`LineMatch`](@ref) in
+photons cm³ s⁻¹. A match supplies the ID for a new evaluation at the requested
+scalar or vector `kT`. Missing transitions contribute zero.
 """
 function line_emissivity(db::AtomDB, id::LineID, kT::Real; teunit = :keV, abundance_table = :angr, abundances = nothing)
     temperature = line_search_temperature(kT, teunit)
@@ -189,16 +192,23 @@ end
 line_emissivity(db::AtomDB, id::LineID, temperatures::AbstractVector; options...) =
     map(kT -> line_emissivity(db, id, kT; options...), temperatures)
 
+line_emissivity(db::AtomDB, match::LineMatch, kT::Union{Real,AbstractVector}; options...) =
+    line_emissivity(db, match.id, kT; options...)
+
 """
     ratio_emissivity(db, numerator, denominator, kT; kwargs...)
 
-Return the emissivity ratio for two transition IDs. A zero denominator yields
-`NaN`.
+Return the emissivity ratio for two transitions at a scalar or vector `kT`.
+Each transition can be a [`LineID`](@ref) or [`LineMatch`](@ref). A zero
+denominator yields `NaN`.
 """
-function ratio_emissivity(db::AtomDB, numerator::LineID, denominator::LineID, kT::Real; options...)
+function ratio_emissivity(db::AtomDB, numerator::Union{LineID,LineMatch},
+        denominator::Union{LineID,LineMatch}, kT::Real; options...)
     value = line_emissivity(db, denominator, kT; options...)
     return iszero(value) ? NaN : line_emissivity(db, numerator, kT; options...) / value
 end
 
-ratio_emissivity(db::AtomDB, numerator::LineID, denominator::LineID, temperatures::AbstractVector; options...) =
-    map(kT -> ratio_emissivity(db, numerator, denominator, kT; options...), temperatures)
+function ratio_emissivity(db::AtomDB, numerator::Union{LineID,LineMatch},
+        denominator::Union{LineID,LineMatch}, temperatures::AbstractVector; options...)
+    return map(kT -> ratio_emissivity(db, numerator, denominator, kT; options...), temperatures)
+end

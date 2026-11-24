@@ -29,10 +29,15 @@ abundance and line-broadening variants.
 using Plasma
 
 # Reads /path/to/apec_v3.0.9_line.fits and /path/to/apec_v3.0.9_coco.fits.
-db = AtomDB("/path/to/apec_v3.0.9")
+db = Plasma.load(AtomDB, "/path/to/apec_v3.0.9")
 edges = range(0.3, 8.0; length = 2001)  # observed energy edges in keV
 flux = apec(edges, db; kT = 0.8, abundance = 0.5, redshift = 0.01, norm = 1e-3)
 ```
+
+Use `Plasma.load(AtomDB, linefile, cocofile)` to specify the two FITS paths.
+Use `AtomDB{Float64,Float64,Float64}` as the first argument to select Float64
+storage for continuum values, line energies, and line emissivities. The
+`AtomDB(prefix)` and `AtomDB(linefile, cocofile)` constructors also work.
 
 `flux` contains photons cm⁻² s⁻¹ integrated over each bin. `apec!` accepts a
 preallocated output vector. Reuse `db` across calls to cache loaded temperature
@@ -226,12 +231,12 @@ lines = find_lines(db, 21.5, 22.2; element = :O, ion = 7, kT = 0.2, brightest = 
 
 # Track one transition or compare two as a function of temperature.
 temperatures = range(0.1, 0.5; length = 50)
-emissivity = line_emissivity(db, lines[1].id, temperatures)
-ratio = ratio_emissivity(db, lines[1].id, lines[2].id, temperatures)
+emissivity = line_emissivity(db, lines[1], temperatures)
+ratio = ratio_emissivity(db, lines[1], lines[2], temperatures)
 
 # Rank by the current temperature distribution and abundances of a native model.
 model = LocalBvcoolflow(db; lowT = 0.1, highT = 2.0, Fe = 0.5)
-strongest = find_lines(db, 0.5, 2.0; unit = :keV, model, brightest = 10)
+strongest = find_lines(model, 0.5, 2.0; unit = :keV, brightest = 10)
 ```
 
 Bounds are inclusive. Use `unit=:angstrom` (default), `:nm`, `:keV`, or

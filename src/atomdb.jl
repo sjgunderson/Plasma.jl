@@ -91,6 +91,19 @@ AtomDB(prefix::AbstractString) = AtomDB{Float32,Float64,Float32}(prefix)
 AtomDB{C,E,F}(prefix::AbstractString) where {C,E,F} =
     AtomDB{C,E,F}(prefix * "_line.fits", prefix * "_coco.fits")
 
+"""
+    Plasma.load(AtomDB, prefix)
+    Plasma.load(AtomDB, linefile, cocofile)
+
+Open an AtomDB CIE database from a common prefix or two explicit FITS paths.
+Pass `AtomDB{C,E,F}` to select the storage precision described in [`AtomDB`](@ref).
+Temperature slices are loaded on demand.
+"""
+load(db_type::Type{<:AtomDB}, prefix::AbstractString) = db_type(prefix)
+
+load(db_type::Type{<:AtomDB}, linefile::AbstractString, cocofile::AbstractString) =
+    db_type(linefile, cocofile)
+
 function read_temperatures(path, count_column)
     isfile(path) || throw(ArgumentError("AtomDB file does not exist: $path"))
     return FITS(path, "r") do fits

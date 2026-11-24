@@ -44,7 +44,7 @@ function temperature_line_ids(db::AtomDB, index::Int, lines::Lines)
                 ions = read(hdu, "Ion"; case_sensitive = false)
                 upper = read(hdu, "UpperLev"; case_sensitive = false)
                 lower = read(hdu, "LowerLev"; case_sensitive = false)
-                _, order = ordered_line_energies(wavelength)
+                _, order = ordered_line_energies(wavelength, db.constants)
                 return [LineID(lines.elements[i], ions[j], upper[j], lower[j]) for (i, j) in enumerate(order)]
             end
             db.line_ids[index] = ids
@@ -53,21 +53,20 @@ function temperature_line_ids(db::AtomDB, index::Int, lines::Lines)
     end
 end
 
-function line_search_unit(unit)
+function line_search_unit(unit, constants::PlasmaConstants)
     name = lowercase(String(unit))
-    name in ("angstrom", "å", "a") && return (KEV_ANGSTROM, true)
-    name == "nm" && return (KEV_ANGSTROM / 10, true)
+    name in ("angstrom", "å", "a") && return (constants.kev_angstrom, true)
+    name == "nm" && return (constants.kev_angstrom / 10, true)
     name == "kev" && return (1.0, false)
     name == "ev" && return (1e3, false)
     throw(ArgumentError("Line search unit must be Angstrom, nm, keV, or eV"))
 end
 
-function line_search_temperature(kT::Real, teunit)
+function line_search_temperature(kT::Real, teunit, constants::PlasmaConstants)
     name = lowercase(String(teunit))
     name in ("kev", "k", "kelvin") || throw(ArgumentError("Temperature unit must be keV or K"))
     isfinite(kT) && kT > 0 || throw(DomainError(kT, "Temperature must be positive and finite"))
-    # Boltzmann's constant in keV/K.
-    return Float64(kT) * (name == "kev" ? 1.0 : 1.380649e-23 / 1.602176634e-16)
+    return Float64(kT) * (name == "kev" ? 1.0 : constants.kev_per_kelvin)
 end
 
 function line_abundance_scales(abundance_table, abundances)
@@ -114,13 +113,13 @@ function find_lines(db::AtomDB, lo::Real, hi::Real; kT = nothing, model = nothin
     isnothing(brightest) || (brightest isa Integer && brightest > 0) ||
         throw(ArgumentError("brightest must be a positive integer"))
 
-    scale, reciprocal = line_search_unit(unit)
+    scale, reciprocal = line_search_unit(unit, db.constants)
     lower, upper = reciprocal ? (scale / hi, scale / lo) : (lo / scale, hi / scale)
     elements = line_selection(element, line_atomic_number)
     ions = line_selection(ion, line_ion_stage)
     weights, scales = if isnothing(model)
         isnothing(kT) && throw(ArgumentError("Specify kT or a native Plasma.jl model to search the CIE tables"))
-        temperature = line_search_temperature(kT, teunit)
+        temperature = line_search_temperature(kT, teunit, db.constants)
         dem_node_weights(db, ((temperature,), (1.0,))), line_abundance_scales(abundance_table, abundances)
     else
         all(isnothing, (kT, abundance_table, abundances)) ||
@@ -147,7 +146,7 @@ function find_lines(db::AtomDB, lo::Real, hi::Real; kT = nothing, model = nothin
             lo <= coordinate <= hi || continue
             emissivity = Float64(weight * scales[id.element] * lines.emissivities[j])
             prior = get(matches, id, nothing)
-            matches[id] = isnothing(prior) ? LineMatch(id, KEV_ANGSTROM / energy, energy, emissivity) :
+            matches[id] = isnothing(prior) ? LineMatch(id, db.constants.kev_angstrom / energy, energy, emissivity) :
                 LineMatch(id, prior.wavelength, prior.energy, prior.emissivity + emissivity)
         end
     end
@@ -179,7 +178,7 @@ photons cm³ s⁻¹. A match supplies the ID for a new evaluation at the request
 scalar or vector `kT`. Missing transitions contribute zero.
 """
 function line_emissivity(db::AtomDB, id::LineID, kT::Real; teunit = :keV, abundance_table = :angr, abundances = nothing)
-    temperature = line_search_temperature(kT, teunit)
+    temperature = line_search_temperature(kT, teunit, db.constants)
     scales = line_abundance_scales(abundance_table, abundances)
     lower, upper, fraction = temperature_bracket(db.temperatures, temperature)
     value = line_emissivity_at_node(db, id, lower)

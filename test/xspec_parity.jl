@@ -21,7 +21,7 @@ end
 
 length(ARGS) == 1 || error("Usage: julia test/xspec_parity.jl /path/to/apec_v3.0.9")
 prefix = abspath(only(ARGS))
-db = AtomDB(prefix)
+db = AtomDB(prefix; constants = :legacy)
 @info "XSPEC APEC reference" libxspec_version = Base.pkgversion(LibXSPEC_jll) temperature_nodes = length(db.temperatures)
 for path in (db.linefile, db.cocofile)
     @info "AtomDB emissivities" path sha256 = bytes2hex(open(sha256, path))
@@ -40,7 +40,7 @@ for key in ("APECTHERMAL", "APECNOLINES", "APECLOGINTERP", "APECLOGTINTERP", "AP
 end
 
 broad = collect(range(0.1, 10.0; length = 2001))
-fine = reverse(12.39841974 ./ collect(range(1.7, 10.5; length = 4401)))
+fine = reverse(db.constants.kev_angstrom ./ collect(range(1.7, 10.5; length = 4401)))
 temperatures = db.temperatures
 middle = searchsortedfirst(temperatures, 1.0)
 node = temperatures[middle]

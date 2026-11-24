@@ -27,7 +27,6 @@ const CPH_LIMITS = (0.01, 50.0)
 const MPC_CM = 3.0856775814913673e24
 const PC_CM = MPC_CM / 1e6
 const LOCAL_COOLING_NORM_UNIT = 1e-14 # solar masses per year per square parsec
-const FLOW_PARTICLES_PER_SECOND = (5 / 2) * (1.98847e33 / 31_557_600) / (0.6 * 1.66053906660e-24)
 
 # XSPEC 12.15's AtomDB grid from plasmaFileInfo, in keV.
 const BOLOMETRIC_EDGES = let lo = 0.0105, hi = 1000.0
@@ -102,11 +101,11 @@ end
 cooling_norm_redshift(settings::CoolingOptions, redshift) = something(settings.normalization_redshift, redshift)
 cooling_norm_redshift(::LocalCoolingOptions, _redshift) = 0.0
 
-function cooling_luminosity_distance(z, cosmology)
+function cooling_luminosity_distance(z, cosmology, constants::PlasmaConstants)
     isfinite(z) && z > 0 ||
         throw(DomainError(z, "Cooling flows require positive redshift or an explicit distance_mpc"))
     (; H0, q0, lambda0) = cosmology
-    hubble_distance = LIGHT_SPEED_KM_S / H0
+    hubble_distance = constants.light_speed_km_s / H0
     if iszero(lambda0)
         term = 1 + 2 * q0 * z
         term >= 0 || throw(DomainError(z, "The Mattig distance is undefined at this redshift"))
@@ -127,20 +126,20 @@ function cooling_luminosity_distance(z, cosmology)
     return (1 + z) * hubble_distance * (2 / 3) * step * integral
 end
 
-function cooling_normalization(z_norm, settings::CoolingOptions)
+function cooling_normalization(z_norm, settings::CoolingOptions, constants::PlasmaConstants)
     isfinite(z_norm) && z_norm > -1 ||
         throw(DomainError(z_norm, "Normalization redshift must be finite and greater than -1"))
     distance = settings.distance_mpc
     if isnothing(distance)
-        distance = cooling_luminosity_distance(z_norm, settings.cosmology)
+        distance = cooling_luminosity_distance(z_norm, settings.cosmology, constants)
     end
     distance_cm = distance * MPC_CM
-    return 1e-14 * FLOW_PARTICLES_PER_SECOND / (4π * distance_cm^2)
+    return 1e-14 * constants.flow_particles_per_second / (4π * distance_cm^2)
 end
 
 # Convert the scaled local K or norm to a mass accretion rate per square parsec.
-cooling_normalization(_z_norm, ::LocalCoolingOptions) =
-    1e-14 * LOCAL_COOLING_NORM_UNIT * FLOW_PARTICLES_PER_SECOND / (4π * PC_CM^2)
+cooling_normalization(_z_norm, ::LocalCoolingOptions, constants::PlasmaConstants) =
+    1e-14 * LOCAL_COOLING_NORM_UNIT * constants.flow_particles_per_second / (4π * PC_CM^2)
 
 function continuum_luminosity(continuum)
     energy, density = continuum.energies, continuum.density
@@ -226,7 +225,7 @@ function cooling_weights(db, abundances, options, settings, z_norm, lowT, highT;
         throw(DomainError(abundances, "Element abundances must be nonnegative and finite"))
     end
     isfinite(slope) || throw(DomainError(slope, "Cooling-flow slope must be finite"))
-    norm = cooling_normalization(z_norm, settings)
+    norm = cooling_normalization(z_norm, settings, db.constants)
     temperatures, logstep = cooling_temperatures(lowT, highT, settings.ntemps)
     if iszero(logstep)
         return zeros(typeof(lowT + highT + norm + first(abundances) + slope), length(db.temperatures))

@@ -45,8 +45,9 @@ end
         @test cached.cache.grid.observed_edges == edge_grid
 
         options = (; kT = 2.3, redshift = -0.03, velocity = 250.0, trace_abundance = :Fe, Fe = 0.4)
-        broadened = Bvapec(db; options...)
-        unprepared = Bvapec(db; options..., cache_spectra = false)
+        codata = AtomDB(db.linefile, db.cocofile; constants = :codata2022)
+        broadened = Bvapec(codata; options...)
+        unprepared = Bvapec(codata; options..., cache_spectra = false)
         for _ in 1:2
             @test invokemodel(edge_grid, broadened) ≈ invokemodel(edge_grid, unprepared)
         end

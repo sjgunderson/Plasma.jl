@@ -159,8 +159,10 @@ function line_model_state(db::AtomDB, model::AbstractCIEModel{<:Number})
     return iszero(total) ? (weights, scales) : (weights ./ total, scales)
 end
 
-line_model_weights(model::AbstractApecModel, _abundances) =
-    dem_node_weights(model.db, ((line_search_temperature(model.kT, :keV),), (1.0,)))
+function line_model_weights(model::AbstractApecModel, _abundances)
+    temperature = line_search_temperature(model.kT, :keV, model.db.constants)
+    return dem_node_weights(model.db, ((temperature,), (1.0,)))
+end
 line_model_weights(model::AbstractDemModel, _abundances) =
     dem_node_weights(model.db, dem_sampling(model))
 line_model_weights(model::AbstractCoolingModel, abundances) =

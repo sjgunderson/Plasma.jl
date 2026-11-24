@@ -5,7 +5,7 @@
         distance_mpc = 10.0
         t1, t2 = 1.0, 3.0
         area = (14^2 - 1^2) / 2
-        e1 = Plasma.KEV_ANGSTROM / 4
+        e1 = db.constants.kev_angstrom / 4
         lum = 4 * area + (2 + 2 * 3 + 4 * 5) * e1
         @test all(isnothing, db.bolometric) && all(isnothing, db.direct_bolometric)
         totals = Plasma.bolometric_elements(db, 1, :direct)
@@ -17,7 +17,7 @@
         @test sum(binned) ≈ sum(Plasma.BOLOMETRIC_CENTERS .* binned_flux) / 1e14
         @test db.bolometric[1] === binned && db.direct_bolometric[1] === totals
 
-        normalization = 1e-14 * Plasma.FLOW_PARTICLES_PER_SECOND / (4π * (distance_mpc * Plasma.MPC_CM)^2)
+        normalization = 1e-14 * db.constants.flow_particles_per_second / (4π * (distance_mpc * Plasma.MPC_CM)^2)
         expected = apec(edges, db; kT = t1) .* (4 * normalization * log(3) / (2 * lum))
         args = (; lowT = t1, highT = t2, redshift = 0.0, distance_mpc, ntemps = 2)
         plain = coolflow(edges, db; args...)
@@ -50,10 +50,10 @@
         @test_throws DomainError coolflow(edges, db; args..., slope = NaN)
 
         z = 0.08
-        d = Plasma.cooling_luminosity_distance(z, CoolingCosmology())
+        d = Plasma.cooling_luminosity_distance(z, CoolingCosmology(), db.constants)
         @test isapprox(d, 363.91869824; rtol = 1e-7)
-        @test isapprox(Plasma.cooling_luminosity_distance(z, CoolingCosmology(lambda0 = 0.0)),
-            Plasma.LIGHT_SPEED_KM_S / 70 * z * (1 + z / 2))
+        @test isapprox(Plasma.cooling_luminosity_distance(z, CoolingCosmology(lambda0 = 0.0), db.constants),
+            db.constants.light_speed_km_s / 70 * z * (1 + z / 2))
         @test isapprox(coolflow(edges, db; redshift = z, distance_mpc = d), coolflow(edges, db; redshift = z))
         @test isapprox(coolflow(edges, db; redshift = z, cosmology = CoolingCosmology(H0 = 140.0)),
             4 .* coolflow(edges, db; redshift = z))

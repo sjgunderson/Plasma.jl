@@ -31,7 +31,7 @@ include("fixtures.jl")
         @test isapprox(out, 2 .* solar)
 
         # A line coincident with an internal edge belongs to the lower XSPEC bin.
-        line_edges = [2.0, Plasma.KEV_ANGSTROM / 4, 4.0]
+        line_edges = [2.0, db.constants.kev_angstrom / 4, 4.0]
         @test isapprox(apec(line_edges, db; abundance = 0), 1e14 .* (3 .* diff(line_edges) .+ [2, 0]))
         @test apec([20.0, 30.0], db) == [0.0]
 
@@ -164,10 +164,11 @@ end
     @test solar_abundances(:felc).Fe == 1.26e-4
     @test_throws ArgumentError solar_abundances(:unknown)
 
-    thermal = Plasma.line_width_fractions(1.0, true, 0.0)
-    mixed = Plasma.line_width_fractions(1.0, true, 300.0)
+    constants = Plasma.LEGACY_CONSTANTS
+    thermal = Plasma.line_width_fractions(1.0, true, 0.0, constants)
+    mixed = Plasma.line_width_fractions(1.0, true, 300.0, constants)
     @test isapprox(thermal[1] / thermal[26], sqrt(Plasma.ATOMIC_MASSES[26] / Plasma.ATOMIC_MASSES[1]))
-    @test isapprox(mixed[26], hypot(thermal[26], 300.0 / Plasma.LIGHT_SPEED_KM_S))
+    @test isapprox(mixed[26], hypot(thermal[26], 300.0 / constants.light_speed_km_s))
     lines = Plasma.Lines([5.0], Float32[2.0], UInt8[26])
     out = zeros(4)
     Plasma.add_broadened_lines!(out, [0.0, 4.5, 5.0, 5.5, 10.0], lines,
@@ -175,6 +176,7 @@ end
     @test isapprox(out, [0.3173105078629141, 0.6826894921370859, 0.6826894921370859, 0.3173105078629141])
 end
 
+include("constants.jl")
 include("dem.jl")
 include("cooling.jl")
 include("line_search.jl")

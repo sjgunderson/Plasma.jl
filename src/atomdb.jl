@@ -1,6 +1,3 @@
-# XSPEC's wavelength-to-energy conversion in keV Å.
-const KEV_ANGSTROM = 12.39841974
-
 struct Continuum{T<:AbstractFloat}
     energies::Vector{T}
     density::Vector{T}
@@ -39,10 +36,10 @@ struct TemperatureSlice{C<:AbstractFloat,E<:AbstractFloat,F<:AbstractFloat}
 end
 
 """
-    AtomDB(linefile, cocofile)
-    AtomDB(prefix)
-    AtomDB{C,E,F}(linefile, cocofile)
-    AtomDB{C,E,F}(prefix)
+    AtomDB(linefile, cocofile; constants=:legacy)
+    AtomDB(prefix; constants=:legacy)
+    AtomDB{C,E,F}(linefile, cocofile; constants=:legacy)
+    AtomDB{C,E,F}(prefix; constants=:legacy)
 
 Open an AtomDB CIE emissivity table pair on the Anders & Grevesse (`angr`)
 abundance scale. A prefix is expanded to `prefix_line.fits` and
@@ -54,6 +51,10 @@ The default storage types are `Float32` for continuum energies and densities,
 typed constructors to select other concrete floating-point types for these
 three quantities, respectively. Storage precision does not change the
 temperature grid or the precision of model parameters and outputs.
+
+Pass `constants=:codata2022` to use CODATA 2022 physical constants. The
+database uses the selected constants for line conversion, broadening, and
+cooling-flow normalization. `constants=:legacy` uses the original values.
 """
 struct AtomDB{C<:AbstractFloat,E<:AbstractFloat,F<:AbstractFloat}
     linefile::String
@@ -64,11 +65,14 @@ struct AtomDB{C<:AbstractFloat,E<:AbstractFloat,F<:AbstractFloat}
     line_ids::Vector{Union{Nothing,Vector{LineID}}}
     bolometric::Vector{Union{Nothing,NTuple{30,Float64}}}
     direct_bolometric::Vector{Union{Nothing,NTuple{30,Float64}}}
+    constants::PlasmaConstants
     cache_lock::ReentrantLock
 
-    function AtomDB{C,E,F}(linefile::AbstractString, cocofile::AbstractString) where {C,E,F}
+    function AtomDB{C,E,F}(linefile::AbstractString, cocofile::AbstractString;
+            constants::Symbol = DEFAULT_CONSTANTS_PRESET) where {C,E,F}
         all(isconcretetype, (C, E, F)) ||
             throw(ArgumentError("AtomDB storage types must be concrete floating-point types"))
+        physical = plasma_constants(constants)
         linepath, cocopath = abspath(linefile), abspath(cocofile)
         line_temperatures = read_temperatures(linepath, "Nline")
         continuum_temperatures = read_temperatures(cocopath, "NCont")
@@ -79,30 +83,34 @@ struct AtomDB{C<:AbstractFloat,E<:AbstractFloat,F<:AbstractFloat}
         line_ids = Vector{Union{Nothing,Vector{LineID}}}(nothing, length(line_temperatures))
         bolometric = Vector{Union{Nothing,NTuple{30,Float64}}}(nothing, length(line_temperatures))
         return new{C,E,F}(linepath, cocopath, line_temperatures, slices, line_lists, line_ids,
-            bolometric, copy(bolometric), ReentrantLock())
+            bolometric, copy(bolometric), physical, ReentrantLock())
     end
 end
 
-AtomDB(linefile::AbstractString, cocofile::AbstractString) =
-    AtomDB{Float32,Float64,Float32}(linefile, cocofile)
+AtomDB(linefile::AbstractString, cocofile::AbstractString; constants::Symbol = DEFAULT_CONSTANTS_PRESET) =
+    AtomDB{Float32,Float64,Float32}(linefile, cocofile; constants)
 
-AtomDB(prefix::AbstractString) = AtomDB{Float32,Float64,Float32}(prefix)
+AtomDB(prefix::AbstractString; constants::Symbol = DEFAULT_CONSTANTS_PRESET) =
+    AtomDB{Float32,Float64,Float32}(prefix; constants)
 
-AtomDB{C,E,F}(prefix::AbstractString) where {C,E,F} =
-    AtomDB{C,E,F}(prefix * "_line.fits", prefix * "_coco.fits")
+AtomDB{C,E,F}(prefix::AbstractString; constants::Symbol = DEFAULT_CONSTANTS_PRESET) where {C,E,F} =
+    AtomDB{C,E,F}(prefix * "_line.fits", prefix * "_coco.fits"; constants)
 
 """
-    Plasma.load(AtomDB, prefix)
-    Plasma.load(AtomDB, linefile, cocofile)
+    Plasma.load(AtomDB, prefix; constants=:legacy)
+    Plasma.load(AtomDB, linefile, cocofile; constants=:legacy)
 
 Open an AtomDB CIE database from a common prefix or two explicit FITS paths.
-Pass `AtomDB{C,E,F}` to select the storage precision described in [`AtomDB`](@ref).
-Temperature slices are loaded on demand.
+Pass `AtomDB{C,E,F}` to select storage precision or `constants=:codata2022`
+to use CODATA 2022, as described in [`AtomDB`](@ref). Temperature slices are
+loaded on demand.
 """
-load(db_type::Type{<:AtomDB}, prefix::AbstractString) = db_type(prefix)
+load(db_type::Type{<:AtomDB}, prefix::AbstractString; constants::Symbol = DEFAULT_CONSTANTS_PRESET) =
+    db_type(prefix; constants)
 
-load(db_type::Type{<:AtomDB}, linefile::AbstractString, cocofile::AbstractString) =
-    db_type(linefile, cocofile)
+load(db_type::Type{<:AtomDB}, linefile::AbstractString, cocofile::AbstractString;
+        constants::Symbol = DEFAULT_CONSTANTS_PRESET) =
+    db_type(linefile, cocofile; constants)
 
 function read_temperatures(path, count_column)
     isfile(path) || throw(ArgumentError("AtomDB file does not exist: $path"))
@@ -119,18 +127,18 @@ function read_temperatures(path, count_column)
     end
 end
 
-function read_lines(path, index, line_type::Type{<:Lines})
+function read_lines(path, index, line_type::Type{<:Lines}, constants::PlasmaConstants)
     return FITS(path, "r") do fits
-        read_lines(fits, path, index, line_type)
+        read_lines(fits, path, index, line_type, constants)
     end
 end
 
-function ordered_line_energies(wavelengths)
-    energies = KEV_ANGSTROM ./ wavelengths
+function ordered_line_energies(wavelengths, constants::PlasmaConstants)
+    energies = constants.kev_angstrom ./ wavelengths
     return energies, sortperm(energies)
 end
 
-function read_lines(fits, path, index, ::Type{Lines{E,F}}) where {E,F}
+function read_lines(fits, path, index, ::Type{Lines{E,F}}, constants::PlasmaConstants) where {E,F}
     hdu = fits["EMISSIVITY", index]
     wavelength = read(hdu, "Lambda"; case_sensitive = false)
     emissivities = read(hdu, "Epsilon"; case_sensitive = false)
@@ -142,7 +150,7 @@ function read_lines(fits, path, index, ::Type{Lines{E,F}}) where {E,F}
     end
 
     # Sort before rounding so the line records and transition IDs stay aligned.
-    energies, order = ordered_line_energies(wavelength)
+    energies, order = ordered_line_energies(wavelength, constants)
     return Lines{E,F}(E.(view(energies, order)), F.(emissivities[order]), UInt8.(elements[order]))
 end
 
@@ -190,7 +198,7 @@ function temperature_lines(db::AtomDB{C,E,F}, index::Int) where {C,E,F}
     return lock(db.cache_lock) do
         lines = db.line_lists[index]
         if isnothing(lines)
-            lines = read_lines(db.linefile, index, Lines{E,F})
+            lines = read_lines(db.linefile, index, Lines{E,F}, db.constants)
             db.line_lists[index] = lines
         end
         return lines::Lines{E,F}
@@ -217,7 +225,7 @@ function load_temperature_slices!(db::AtomDB{C,E,F}, indices) where {C,E,F}
                     isnothing(db.slices[i]) || continue
                     lines = db.line_lists[i]
                     if isnothing(lines)
-                        lines = read_lines(linefile, db.linefile, i, Lines{E,F})
+                        lines = read_lines(linefile, db.linefile, i, Lines{E,F}, db.constants)
                         db.line_lists[i] = lines
                     end
                     continua = read_continua(cocofile, db.cocofile, i, C)

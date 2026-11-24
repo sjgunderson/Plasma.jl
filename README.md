@@ -39,6 +39,12 @@ Use `AtomDB{Float64,Float64,Float64}` as the first argument to select Float64
 storage for continuum values, line energies, and line emissivities. The
 `AtomDB(prefix)` and `AtomDB(linefile, cocofile)` constructors also work.
 
+Pass `constants=:codata2022` to either loading interface to use CODATA 2022.
+The default `constants=:legacy` selects the original values for XSPEC parity
+and reproducibility. Each database uses its own constants for line energies,
+line queries, thermal broadening, and cooling-flow normalization. The element
+masses, parsec and year conversions, and solar mass retain their existing values.
+
 `flux` contains photons cm⁻² s⁻¹ integrated over each bin. `apec!` accepts a
 preallocated output vector. Reuse `db` across calls to cache loaded temperature
 slices. Temperatures outside the tabulated range use the nearest tabulated

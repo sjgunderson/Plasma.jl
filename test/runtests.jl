@@ -58,6 +58,32 @@ end
     end
 end
 
+@testset "Parametric AtomDB storage" begin
+    mktempdir() do dir
+        edges = [1.0, 4.0, 8.0, 13.0]
+        for variable_continuum in (false, true)
+            prefix = write_test_apec(joinpath(dir, string(variable_continuum)); variable_continuum)
+            reference = apec(edges, AtomDB(prefix); kT = 2.0)
+            for (db, C, E, F) in (
+                    (AtomDB(prefix), Float32, Float64, Float32),
+                    (AtomDB{Float32,Float32,Float32}(prefix), Float32, Float32, Float32),
+                    (AtomDB{Float64,Float64,Float64}(prefix * "_line.fits", prefix * "_coco.fits"),
+                        Float64, Float64, Float64))
+                @test all(isnothing, db.slices) && all(isnothing, db.line_lists)
+                lines = Plasma.temperature_lines(db, 1)
+                @test lines isa Plasma.Lines{E,F}
+                @test eltype(db.line_lists) === Union{Nothing,Plasma.Lines{E,F}}
+                @test isnothing(db.slices[1])
+                slice = Plasma.temperature_slice(db, 1)
+                @test slice.lines === lines
+                @test eltype(slice.continua) === Tuple{Int,Plasma.Continuum{C}}
+                @test eltype(db.slices) === Union{Nothing,typeof(slice)}
+                @test apec(edges, db; kT = 2.0) ≈ reference
+            end
+        end
+    end
+end
+
 @testset "Continuum sampled at bin midpoints" begin
     # The first midpoint equals the first node. The second bin straddles an
     # internal node, where midpoint sampling differs from an exact integral.

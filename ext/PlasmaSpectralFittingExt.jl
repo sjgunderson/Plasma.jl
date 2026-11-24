@@ -23,8 +23,8 @@ for (name, abundance_names, broadened) in (
     names = (:K, :kT, abundance_names..., :redshift)
     broadened && (names = (names..., :velocity))
     fields = [:($parameter::T) for parameter in names]
-    @eval struct $name{T} <: AbstractApecModel{T}
-        db::AtomDB
+    @eval struct $name{T,D<:AtomDB} <: AbstractApecModel{T}
+        db::D
         options::ApecOptions
         cache::Union{Nothing,SpectrumCache}
         $(fields...)

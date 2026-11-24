@@ -67,7 +67,7 @@ end
 
 @testset "Rank lines from a Plasma model" begin
     mktempdir() do dir
-        db = AtomDB(write_test_apec(joinpath(dir, "model_lines")))
+        db = AtomDB{Float64,Float64,Float64}(write_test_apec(joinpath(dir, "model_lines")))
         model = Vapec(db; kT = 2.0, Fe = 0.25, redshift = 0.1, K = 0.01)
         fe = only(find_lines(db, 1.0, 4.0; model, element = :Fe))
         @test fe.id == LineID(:Fe, 17, 5, 1)
@@ -80,6 +80,14 @@ end
         cool = LocalCoolflow(db; lowT = 1.0, highT = 3.0, slope = 0.7)
         @test !isempty(find_lines(db, 1.0, 4.0; model = cool, brightest = 1))
         @test_throws ArgumentError find_lines(AtomDB(db.linefile, db.cocofile), 1.0, 4.0; model)
+
+        edges = [1.0, 4.0, 8.0, 13.0]
+        for component in (model, dem, cool)
+            @test fieldtype(typeof(component), :db) === typeof(db)
+            copied = copy(component)
+            @test copied.db === db && copied.K !== component.K
+            @test invokemodel(edges, copied) ≈ invokemodel(edges, component)
+        end
     end
 end
 

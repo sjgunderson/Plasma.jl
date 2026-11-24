@@ -1,14 +1,14 @@
 # XSPEC's wavelength-to-energy conversion in keV Å.
 const KEV_ANGSTROM = 12.39841974
 
-struct Continuum
-    energies::Vector{Float32}
-    density::Vector{Float32}
+struct Continuum{T<:AbstractFloat}
+    energies::Vector{T}
+    density::Vector{T}
 end
 
-struct Lines
-    energies::Vector{Float64}
-    emissivities::Vector{Float32}
+struct Lines{E<:AbstractFloat,F<:AbstractFloat}
+    energies::Vector{E}
+    emissivities::Vector{F}
     elements::Vector{UInt8}
 end
 
@@ -33,47 +33,63 @@ struct LineID
     end
 end
 
-struct TemperatureSlice
-    continua::Vector{Tuple{Int,Continuum}}
-    lines::Lines
+struct TemperatureSlice{C<:AbstractFloat,E<:AbstractFloat,F<:AbstractFloat}
+    continua::Vector{Tuple{Int,Continuum{C}}}
+    lines::Lines{E,F}
 end
 
 """
     AtomDB(linefile, cocofile)
     AtomDB(prefix)
+    AtomDB{C,E,F}(linefile, cocofile)
+    AtomDB{C,E,F}(prefix)
 
 Open an AtomDB CIE emissivity table pair on the Anders & Grevesse (`angr`)
 abundance scale. A prefix is expanded to `prefix_line.fits` and
 `prefix_coco.fits`. The constructor reads the temperature grid in keV.
 Each temperature's emissivities are read on demand and cached in this object.
+
+The default storage types are `Float32` for continuum energies and densities,
+`Float64` for line energies, and `Float32` for line emissivities. Use the
+typed constructors to select other concrete floating-point types for these
+three quantities, respectively. Storage precision does not change the
+temperature grid or the precision of model parameters and outputs.
 """
-struct AtomDB
+struct AtomDB{C<:AbstractFloat,E<:AbstractFloat,F<:AbstractFloat}
     linefile::String
     cocofile::String
     temperatures::Vector{Float64}
-    slices::Vector{Union{Nothing,TemperatureSlice}}
-    line_lists::Vector{Union{Nothing,Lines}}
+    slices::Vector{Union{Nothing,TemperatureSlice{C,E,F}}}
+    line_lists::Vector{Union{Nothing,Lines{E,F}}}
     line_ids::Vector{Union{Nothing,Vector{LineID}}}
     bolometric::Vector{Union{Nothing,NTuple{30,Float64}}}
     direct_bolometric::Vector{Union{Nothing,NTuple{30,Float64}}}
     cache_lock::ReentrantLock
 
-    function AtomDB(linefile::AbstractString, cocofile::AbstractString)
+    function AtomDB{C,E,F}(linefile::AbstractString, cocofile::AbstractString) where {C,E,F}
+        all(isconcretetype, (C, E, F)) ||
+            throw(ArgumentError("AtomDB storage types must be concrete floating-point types"))
         linepath, cocopath = abspath(linefile), abspath(cocofile)
         line_temperatures = read_temperatures(linepath, "Nline")
         continuum_temperatures = read_temperatures(cocopath, "NCont")
         line_temperatures == continuum_temperatures ||
             throw(ArgumentError("AtomDB line and continuum files have different temperature grids"))
-        slices = Vector{Union{Nothing,TemperatureSlice}}(nothing, length(line_temperatures))
-        line_lists = Vector{Union{Nothing,Lines}}(nothing, length(line_temperatures))
+        slices = Vector{Union{Nothing,TemperatureSlice{C,E,F}}}(nothing, length(line_temperatures))
+        line_lists = Vector{Union{Nothing,Lines{E,F}}}(nothing, length(line_temperatures))
         line_ids = Vector{Union{Nothing,Vector{LineID}}}(nothing, length(line_temperatures))
         bolometric = Vector{Union{Nothing,NTuple{30,Float64}}}(nothing, length(line_temperatures))
-        return new(linepath, cocopath, line_temperatures, slices, line_lists, line_ids,
+        return new{C,E,F}(linepath, cocopath, line_temperatures, slices, line_lists, line_ids,
             bolometric, copy(bolometric), ReentrantLock())
     end
 end
 
-AtomDB(prefix::AbstractString) = AtomDB(prefix * "_line.fits", prefix * "_coco.fits")
+AtomDB(linefile::AbstractString, cocofile::AbstractString) =
+    AtomDB{Float32,Float64,Float32}(linefile, cocofile)
+
+AtomDB(prefix::AbstractString) = AtomDB{Float32,Float64,Float32}(prefix)
+
+AtomDB{C,E,F}(prefix::AbstractString) where {C,E,F} =
+    AtomDB{C,E,F}(prefix * "_line.fits", prefix * "_coco.fits")
 
 function read_temperatures(path, count_column)
     isfile(path) || throw(ArgumentError("AtomDB file does not exist: $path"))
@@ -90,13 +106,13 @@ function read_temperatures(path, count_column)
     end
 end
 
-function read_lines(path, index)
+function read_lines(path, index, line_type::Type{<:Lines})
     return FITS(path, "r") do fits
-        read_lines(fits, path, index)
+        read_lines(fits, path, index, line_type)
     end
 end
 
-function read_lines(fits, path, index)
+function read_lines(fits, path, index, ::Type{Lines{E,F}}) where {E,F}
     hdu = fits["EMISSIVITY", index]
     wavelength = read(hdu, "Lambda"; case_sensitive = false)
     emissivities = read(hdu, "Epsilon"; case_sensitive = false)
@@ -107,9 +123,9 @@ function read_lines(fits, path, index)
         throw(ArgumentError("Invalid CIE line record at temperature index $index in $path"))
     end
 
-    energies = KEV_ANGSTROM ./ wavelength
+    energies = E.(KEV_ANGSTROM ./ wavelength)
     order = sortperm(energies)
-    return Lines(energies[order], Float32.(emissivities[order]), UInt8.(elements[order]))
+    return Lines{E,F}(energies[order], F.(emissivities[order]), UInt8.(elements[order]))
 end
 
 # FITSIO returns a vector of row vectors for variable-length columns, and
@@ -117,14 +133,14 @@ end
 continuum_rows(column::AbstractVector{<:AbstractVector}, _nrows) = column
 continuum_rows(column::AbstractArray{<:Real}, nrows) = eachcol(reshape(column, :, nrows))
 
-function read_continua(fits, path, index)
+function read_continua(fits, path, index, ::Type{T}) where {T<:AbstractFloat}
     hdu = fits["EMISSIVITY", index]
     elements = read(hdu, "Z"; case_sensitive = false)
     ions = read(hdu, "rmJ"; case_sensitive = false)
     if !all(iszero, ions) || !all(z -> 1 <= z <= 30, elements) || !allunique(elements)
         throw(ArgumentError("Expected one CIE continuum row per element at temperature index $index in $path"))
     end
-    continua = Tuple{Int,Continuum}[]
+    continua = Tuple{Int,Continuum{T}}[]
     isempty(elements) && return continua
     for (count_column, energy_column, density_column) in (
             ("N_Cont", "E_Cont", "Continuum"), ("N_Pseudo", "E_Pseudo", "Pseudo"))
@@ -139,8 +155,8 @@ function read_continua(fits, path, index)
                     "declared $n points, found $(length(energy_row)) energies and $(length(density_row)) emissivities"))
             end
             iszero(n) && continue
-            e = Vector{Float32}(view(energy_row, 1:n))
-            f = Vector{Float32}(view(density_row, 1:n))
+            e = Vector{T}(view(energy_row, 1:n))
+            f = Vector{T}(view(density_row, 1:n))
             if !all(x -> isfinite(x) && x > 0, e) ||
                     !all(j -> e[j] > e[j - 1], 2:length(e)) ||
                     !all(x -> isfinite(x) && x >= 0, f)
@@ -152,29 +168,29 @@ function read_continua(fits, path, index)
     return continua
 end
 
-function temperature_lines(db::AtomDB, index::Int)
+function temperature_lines(db::AtomDB{C,E,F}, index::Int) where {C,E,F}
     return lock(db.cache_lock) do
         lines = db.line_lists[index]
         if isnothing(lines)
-            lines = read_lines(db.linefile, index)
+            lines = read_lines(db.linefile, index, Lines{E,F})
             db.line_lists[index] = lines
         end
-        return lines
+        return lines::Lines{E,F}
     end
 end
 
-function temperature_slice(db::AtomDB, index::Int)
+function temperature_slice(db::AtomDB{C,E,F}, index::Int) where {C,E,F}
     return lock(db.cache_lock) do
         slice = db.slices[index]
         if isnothing(slice)
             load_temperature_slices!(db, (index,))
             slice = db.slices[index]
         end
-        return slice::TemperatureSlice
+        return slice::TemperatureSlice{C,E,F}
     end
 end
 
-function load_temperature_slices!(db, indices)
+function load_temperature_slices!(db::AtomDB{C,E,F}, indices) where {C,E,F}
     return lock(db.cache_lock) do
         any(i -> isnothing(db.slices[i]), indices) || return nothing
         FITS(db.linefile, "r") do linefile
@@ -183,10 +199,10 @@ function load_temperature_slices!(db, indices)
                     isnothing(db.slices[i]) || continue
                     lines = db.line_lists[i]
                     if isnothing(lines)
-                        lines = read_lines(linefile, db.linefile, i)
+                        lines = read_lines(linefile, db.linefile, i, Lines{E,F})
                         db.line_lists[i] = lines
                     end
-                    continua = read_continua(cocofile, db.cocofile, i)
+                    continua = read_continua(cocofile, db.cocofile, i, C)
                     db.slices[i] = TemperatureSlice(continua, lines)
                 end
             end

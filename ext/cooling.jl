@@ -21,8 +21,8 @@ for (variants, supertype, temperature_parameters, cooling_options) in (
         broadened && (names = (names..., :velocity))
         supertype === :AbstractCoolflowModel && (names = (names..., :slope))
         fields = [:($parameter::T) for parameter in names]
-        @eval struct $model{T} <: $supertype{T}
-            db::AtomDB
+        @eval struct $model{T,D<:AtomDB} <: $supertype{T}
+            db::D
             options::ApecOptions
             cache::Union{Nothing,SpectrumCache}
             cooling::$cooling_options

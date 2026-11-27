@@ -1,12 +1,13 @@
 using FITSIO: FITS
 
-function write_test_apec(prefix; continuum_temperatures = Float32[1, 3], variable_continuum = false)
+function write_test_apec(prefix; continuum_temperatures = Float32[1, 3], variable_continuum = false,
+        wavelengths = Float32[4, 2, 1])
     temperatures = Float32[1, 3]
     FITS(prefix * "_line.fits", "w") do fits
         write(fits, ["kT", "Nline"], Any[temperatures, Int32[3, 3]]; name = "PARAMETERS")
         for (index, scale) in enumerate(Float32[1, 3])
             write(fits, ["Lambda", "Epsilon", "Element", "Ion", "UpperLev", "LowerLev"],
-                Any[Float32[4, 2, 1], scale .* Float32[2, 3, 5], Int32[1, 26, 11],
+                Any[wavelengths, scale .* Float32[2, 3, 5], Int32[1, 26, 11],
                     Int32[1, 17, 11], Int32[2, 5, 3], Int32[1, 1, 1]];
                 name = "EMISSIVITY", ver = index)
         end

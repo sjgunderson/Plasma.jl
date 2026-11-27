@@ -45,8 +45,9 @@ end
         @test cached.cache.grid.observed_edges == edge_grid
 
         options = (; kT = 2.3, redshift = -0.03, velocity = 250.0, trace_abundance = :Fe, Fe = 0.4)
-        broadened = Bvapec(db; options...)
-        unprepared = Bvapec(db; options..., cache_spectra = false)
+        codata = AtomDB(db.linefile, db.cocofile; constants = :codata2022)
+        broadened = Bvapec(codata; options...)
+        unprepared = Bvapec(codata; options..., cache_spectra = false)
         for _ in 1:2
             @test invokemodel(edge_grid, broadened) ≈ invokemodel(edge_grid, unprepared)
         end
@@ -67,19 +68,28 @@ end
 
 @testset "Rank lines from a Plasma model" begin
     mktempdir() do dir
-        db = AtomDB(write_test_apec(joinpath(dir, "model_lines")))
+        db = AtomDB{Float64,Float64,Float64}(write_test_apec(joinpath(dir, "model_lines")))
         model = Vapec(db; kT = 2.0, Fe = 0.25, redshift = 0.1, K = 0.01)
         fe = only(find_lines(db, 1.0, 4.0; model, element = :Fe))
         @test fe.id == LineID(:Fe, 17, 5, 1)
         @test fe.emissivity == 1.5
         @test fe.wavelength ≈ 2.0
+        @test only(find_lines(model, 1.0, 4.0; element = :Fe)) == fe
 
         dem = Wdem(db; Tmax = 2.0, beta = 1.0, abundance = 0.25)
-        @test only(find_lines(db, 1.0, 4.0; model = dem, element = :Fe)).emissivity ≈ fe.emissivity
+        @test only(find_lines(dem, 1.0, 4.0; element = :Fe)).emissivity ≈ fe.emissivity
 
         cool = LocalCoolflow(db; lowT = 1.0, highT = 3.0, slope = 0.7)
-        @test !isempty(find_lines(db, 1.0, 4.0; model = cool, brightest = 1))
+        @test !isempty(find_lines(cool, 1.0, 4.0; brightest = 1))
         @test_throws ArgumentError find_lines(AtomDB(db.linefile, db.cocofile), 1.0, 4.0; model)
+
+        edges = [1.0, 4.0, 8.0, 13.0]
+        for component in (model, dem, cool)
+            @test fieldtype(typeof(component), :db) === typeof(db)
+            copied = copy(component)
+            @test copied.db === db && copied.K !== component.K
+            @test invokemodel(edges, copied) ≈ invokemodel(edges, component)
+        end
     end
 end
 

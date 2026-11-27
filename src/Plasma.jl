@@ -1,7 +1,9 @@
 module Plasma
 
 using FITSIO: FITS
+using PhysicalConstants: CODATA2022
 using SpecialFunctions: erf
+using Unitful: @u_str, ustrip
 
 export AtomDB, solar_abundances
 export LineID, LineMatch, find_lines, line_emissivity, ratio_emissivity
@@ -20,6 +22,7 @@ export LocalCph, LocalVcph, LocalBcph, LocalBvcph
 export localcoolflow, localvcoolflow, localbcoolflow, localbvcoolflow
 export localcph, localvcph, localbcph, localbvcph
 
+include("constants.jl")
 include("abundances.jl")
 include("atomdb.jl")
 include("broadening.jl")

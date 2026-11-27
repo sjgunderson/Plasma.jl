@@ -4,7 +4,7 @@ using Plasma: AtomDB, ApecOptions, ELEMENT_NAMES, VAPEC_NAMES, apec_options,
     element_parameters, evaluate_cie!, tied_abundances, partial_abundances, line_search_temperature,
     SpectrumCache, spectrum_cache, VAPEC_INDEX, DEM_INDEX
 import Plasma: Apec, Bapec, Vapec, Vvapec, Bvapec, Bvvapec
-import Plasma: line_model_state, cache_value, cache_constant
+import Plasma: find_lines, line_model_state, cache_value, cache_constant
 using SpectralFitting: AbstractSpectralModel, Additive, FitParam
 import SpectralFitting
 
@@ -23,8 +23,8 @@ for (name, abundance_names, broadened) in (
     names = (:K, :kT, abundance_names..., :redshift)
     broadened && (names = (names..., :velocity))
     fields = [:($parameter::T) for parameter in names]
-    @eval struct $name{T} <: AbstractApecModel{T}
-        db::AtomDB
+    @eval struct $name{T,D<:AtomDB} <: AbstractApecModel{T}
+        db::D
         options::ApecOptions
         cache::Union{Nothing,SpectrumCache}
         $(fields...)
@@ -140,6 +140,9 @@ end
 include("dem.jl")
 include("cooling.jl")
 
+find_lines(model::AbstractCIEModel, lo::Real, hi::Real; options...) =
+    find_lines(model.db, lo, hi; options..., model)
+
 function line_model_state(db::AtomDB, model::AbstractCIEModel{<:FitParam})
     values = map(parameter -> parameter.value, SpectralFitting.parameter_vector(model))
     return line_model_state(db, SpectralFitting.remake_with_parameters(model, values))
@@ -156,8 +159,10 @@ function line_model_state(db::AtomDB, model::AbstractCIEModel{<:Number})
     return iszero(total) ? (weights, scales) : (weights ./ total, scales)
 end
 
-line_model_weights(model::AbstractApecModel, _abundances) =
-    dem_node_weights(model.db, ((line_search_temperature(model.kT, :keV),), (1.0,)))
+function line_model_weights(model::AbstractApecModel, _abundances)
+    temperature = line_search_temperature(model.kT, :keV, model.db.constants)
+    return dem_node_weights(model.db, ((temperature,), (1.0,)))
+end
 line_model_weights(model::AbstractDemModel, _abundances) =
     dem_node_weights(model.db, dem_sampling(model))
 line_model_weights(model::AbstractCoolingModel, abundances) =

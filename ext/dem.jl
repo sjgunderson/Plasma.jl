@@ -19,8 +19,8 @@ for (variants, supertype, temperature_parameters) in (
         names = (:K, temperature_parameters..., abundance_parameters..., :redshift)
         broadened && (names = (names..., :velocity))
         fields = [:($parameter::T) for parameter in names]
-        @eval struct $model{T} <: $supertype{T}
-            db::AtomDB
+        @eval struct $model{T,D<:AtomDB} <: $supertype{T}
+            db::D
             options::ApecOptions
             cache::Union{Nothing,SpectrumCache}
             $(fields...)

@@ -5,14 +5,12 @@ const ATOMIC_MASSES = (
     32.065, 35.4527, 39.948, 39.0983, 40.078, 44.955910, 47.867, 50.9415,
     51.9961, 54.938049, 55.845, 58.933200, 58.6934, 63.456, 65.39,
 )
-const LIGHT_SPEED_KM_S = 299792.458
-const KEV_PER_ATOMIC_MASS = 931494.10242  # atomic mass unit times c^2
 const GAUSSIAN_SIGMAS = 8
 
-function line_width_fractions(kT, thermal, velocity)
-    turbulent = (velocity / LIGHT_SPEED_KM_S)^2
+function line_width_fractions(kT, thermal, velocity, constants::PlasmaConstants)
+    turbulent = (velocity / constants.light_speed_km_s)^2
     # The thermal variance uses the temperature of each emissivity slice.
-    thermal_scale = thermal ? kT / KEV_PER_ATOMIC_MASS : 0.0
+    thermal_scale = thermal ? kT / constants.kev_per_atomic_mass : 0.0
     return map(mass -> sqrt(thermal_scale / mass + turbulent), ATOMIC_MASSES)
 end
 

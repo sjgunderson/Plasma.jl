@@ -172,19 +172,19 @@ end
 
 function add_slice!(output, edges, centers, widths, db, index, scales, weight, thermal, velocity, columns = nothing)
     slice = temperature_slice(db, index)
-    return add_slice!(output, edges, centers, widths, slice, db.temperatures[index],
+    return add_slice!(output, edges, centers, widths, slice, db.temperatures[index], db.constants,
         scales, weight, thermal, velocity, columns)
 end
 
 function add_slice!(output, edges, centers, widths, slice::TemperatureSlice, temperature,
-        scales, weight, thermal, velocity, columns)
+        constants::PlasmaConstants, scales, weight, thermal, velocity, columns)
     coefficients = map(scale -> weight * scale, scales)
     for (z, continuum) in slice.continua
         bins = spectrum_column(output, columns, z)
         add_continuum!(bins, centers, widths, continuum, coefficients[z])
     end
     if thermal || !iszero(velocity)
-        fractions = line_width_fractions(temperature, thermal, velocity)
+        fractions = line_width_fractions(temperature, thermal, velocity, constants)
         add_broadened_lines!(output, edges, slice.lines, coefficients, fractions, columns)
     else
         add_lines!(output, edges, slice.lines, coefficients, columns)
@@ -205,7 +205,7 @@ function add_threaded_emission!(output, edges, centers, widths, db, weights, ind
         bins = buffers[worker]
         for i in start:stop
             index = indices[i]
-            add_slice!(bins, edges, centers, widths, slices[i], db.temperatures[index],
+            add_slice!(bins, edges, centers, widths, slices[i], db.temperatures[index], db.constants,
                 scales, weights[index], thermal, velocity, nothing)
         end
     end

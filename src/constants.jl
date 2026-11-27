@@ -36,7 +36,7 @@ const CODATA2022_CONSTANTS = let
     )
 end
 
-const DEFAULT_CONSTANTS_PRESET = :legacy
+const DEFAULT_CONSTANTS_PRESET = :codata2022
 
 function plasma_constants(preset::Symbol)
     preset === :legacy && return LEGACY_CONSTANTS

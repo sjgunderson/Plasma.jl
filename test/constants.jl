@@ -4,8 +4,10 @@
         legacy = AtomDB(prefix; constants = :legacy)
         db_type = AtomDB{Float32,Float64,Float32}
         codata = Plasma.load(db_type, legacy.linefile, legacy.cocofile; constants = :codata2022)
-        @test AtomDB(prefix).constants === legacy.constants
-        @test Plasma.load(AtomDB, prefix; constants = :codata2022).constants === codata.constants
+        @test AtomDB(prefix).constants === codata.constants
+        @test Plasma.load(AtomDB, prefix).constants === codata.constants
+        @test Plasma.load(db_type, legacy.linefile, legacy.cocofile).constants === codata.constants
+        @test Plasma.load(AtomDB, prefix; constants = :legacy).constants === legacy.constants
         @test_throws ArgumentError AtomDB(prefix; constants = :unknown)
 
         @test legacy.constants.kev_angstrom == 12.39841974

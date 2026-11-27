@@ -36,10 +36,10 @@ struct TemperatureSlice{C<:AbstractFloat,E<:AbstractFloat,F<:AbstractFloat}
 end
 
 """
-    AtomDB(linefile, cocofile; constants=:legacy)
-    AtomDB(prefix; constants=:legacy)
-    AtomDB{C,E,F}(linefile, cocofile; constants=:legacy)
-    AtomDB{C,E,F}(prefix; constants=:legacy)
+    AtomDB(linefile, cocofile; constants=:codata2022)
+    AtomDB(prefix; constants=:codata2022)
+    AtomDB{C,E,F}(linefile, cocofile; constants=:codata2022)
+    AtomDB{C,E,F}(prefix; constants=:codata2022)
 
 Open an AtomDB CIE emissivity table pair on the Anders & Grevesse (`angr`)
 abundance scale. A prefix is expanded to `prefix_line.fits` and
@@ -52,9 +52,8 @@ typed constructors to select other concrete floating-point types for these
 three quantities, respectively. Storage precision does not change the
 temperature grid or the precision of model parameters and outputs.
 
-Pass `constants=:codata2022` to use CODATA 2022 physical constants. The
-database uses the selected constants for line conversion, broadening, and
-cooling-flow normalization. `constants=:legacy` uses the original values.
+CODATA 2022 is the default for line conversion, broadening, and cooling-flow
+normalization. Pass `constants=:legacy` to reproduce the original values.
 """
 struct AtomDB{C<:AbstractFloat,E<:AbstractFloat,F<:AbstractFloat}
     linefile::String
@@ -97,13 +96,13 @@ AtomDB{C,E,F}(prefix::AbstractString; constants::Symbol = DEFAULT_CONSTANTS_PRES
     AtomDB{C,E,F}(prefix * "_line.fits", prefix * "_coco.fits"; constants)
 
 """
-    Plasma.load(AtomDB, prefix; constants=:legacy)
-    Plasma.load(AtomDB, linefile, cocofile; constants=:legacy)
+    Plasma.load(AtomDB, prefix; constants=:codata2022)
+    Plasma.load(AtomDB, linefile, cocofile; constants=:codata2022)
 
 Open an AtomDB CIE database from a common prefix or two explicit FITS paths.
-Pass `AtomDB{C,E,F}` to select storage precision or `constants=:codata2022`
-to use CODATA 2022, as described in [`AtomDB`](@ref). Temperature slices are
-loaded on demand.
+Pass `AtomDB{C,E,F}` to select storage precision or `constants=:legacy`
+to reproduce the original constants, as described in [`AtomDB`](@ref).
+Temperature slices are loaded on demand.
 """
 load(db_type::Type{<:AtomDB}, prefix::AbstractString; constants::Symbol = DEFAULT_CONSTANTS_PRESET) =
     db_type(prefix; constants)
